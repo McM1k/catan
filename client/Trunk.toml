@@ -1,0 +1,8 @@
+[build]
+dist = "dist"
+
+# For `trunk serve` during development: forward the game socket to the
+# Rust server (run it with `cargo run -p server`).
+[[proxy]]
+backend = "ws://127.0.0.1:3000/ws"
+ws = true

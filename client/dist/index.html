@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Colonists</title>
+    <link rel="stylesheet" href="/style-d6f66a39a3a9ceef.css" integrity="sha384-ySqQPzMGeorsPk9kF71tbpaSzmOUOeQPaxjUxmHytrXlwk5X23WOhP26CBeOKkxP"/>
+    
+<script type="module">
+import init, * as bindings from '/client-b2f85319c222000d.js';
+const wasm = await init({ module_or_path: '/client-b2f85319c222000d_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+  <link rel="modulepreload" href="/client-b2f85319c222000d.js" crossorigin="anonymous" integrity="sha384-XdkpcPKfcw5iCVX++edzPFRhQ1wlZReIP3g5iqBfXnaLSLSlABfc+FWpdA5JCPHy"><link rel="preload" href="/client-b2f85319c222000d_bg.wasm" crossorigin="anonymous" integrity="sha384-ubkGYBYsBClv62z572BRZha9ycfPPA0MwLW5L3sdYrhc1+ilwTwkSTzGEKnLUFZF" as="fetch" type="application/wasm"></head>
+  <body></body>
+</html>

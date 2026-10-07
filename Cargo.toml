@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["engine", "server", "client"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.8"
+getrandom = { version = "0.2", features = ["js"] }
