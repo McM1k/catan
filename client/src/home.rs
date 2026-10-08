@@ -1,25 +1,10 @@
-use crate::state::{leave, save, send, App, Screen, KEY_NAME};
-use engine::protocol::{ClientMsg, LobbyPlayer};
+use crate::state::{create_room, join_room, leave, send, App, Screen};
 use leptos::prelude::*;
+use protocol::{ClientMsg, GameKind, LobbyPlayer};
 
 pub fn home_screen(app: App) -> impl IntoView {
-    let create = move |_| {
-        let name = app.name.get_untracked();
-        save(KEY_NAME, &name);
-        send(app, &ClientMsg::Create { name });
-    };
-    let join = move |_| {
-        let name = app.name.get_untracked();
-        save(KEY_NAME, &name);
-        send(
-            app,
-            &ClientMsg::Join {
-                room: app.room_input.get_untracked(),
-                name,
-                token: None,
-            },
-        );
-    };
+    let create = move |_| create_room(app, GameKind::Colonists);
+    let join = move |_| join_room(app);
 
     view! {
         <div class="home card">

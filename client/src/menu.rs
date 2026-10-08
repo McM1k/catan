@@ -2,68 +2,44 @@
 
 use crate::state::{App, Screen};
 use leptos::prelude::*;
-
-/// Where the Hanabi card leads. Set `HANABI_URL` when building the client,
-/// e.g. `HANABI_URL=https://hanabi.example.com trunk build --release`.
-/// Without it the card is shown greyed out.
-const HANABI_URL: Option<&str> = option_env!("HANABI_URL");
+use protocol::GameKind;
 
 pub fn menu_screen(app: App) -> impl IntoView {
-    menu_view(app, HANABI_URL)
-}
-
-pub fn menu_view(app: App, hanabi_url: Option<&'static str>) -> impl IntoView {
-    let colonists = view! {
-        <button class="game-card" on:click=move |_| app.screen.set(Screen::Home)>
-            {card_body(
-                colonists_icon().into_any(),
-                "Colonists",
-                "2–4 players",
-                "Build roads and settlements, trade resources and race to 10 points on a random island.",
-                "Play",
-            )}
-        </button>
-    };
-
-    let hanabi_body = |footer: &'static str| {
-        card_body(
-            hanabi_icon().into_any(),
-            "Hanabi",
-            "2–5 players",
-            "A cooperative card game: build the fireworks in order, but you can't see your own hand.",
-            footer,
-        )
-    };
-    let hanabi = match hanabi_url {
-        Some(url) => view! { <a class="game-card" href=url>{hanabi_body("Play")}</a> }.into_any(),
-        None => view! {
-            <div class="game-card disabled" aria-disabled="true">{hanabi_body("Not connected yet")}</div>
-        }
-        .into_any(),
-    };
+    let colonists = game_card(
+        app,
+        GameKind::Colonists,
+        colonists_icon().into_any(),
+        "Build roads and settlements, trade resources and race to 10 points on a random island.",
+    );
+    let hanabi = game_card(
+        app,
+        GameKind::Hanabi,
+        hanabi_icon().into_any(),
+        "A cooperative card game: build the fireworks in order, but you can't see your own hand.",
+    );
 
     view! {
-        <div class="menu">
-            <h1>"Pick a game"</h1>
-            <p class="muted">"Play with friends in your browser: no accounts, just a room code."</p>
-            <div class="game-grid">{colonists}{hanabi}</div>
+        <div class="menu-page">
+            <div class="menu">
+                <h1>"Pick a game"</h1>
+                <p class="muted">"Play with friends in your browser: no accounts, just a room code."</p>
+                <div class="game-grid">{colonists}{hanabi}</div>
+            </div>
         </div>
     }
 }
 
-fn card_body(
-    icon: AnyView,
-    title: &'static str,
-    players: &'static str,
-    blurb: &'static str,
-    footer: &'static str,
-) -> impl IntoView {
+/// One card of the picker; it leads to that game's create/join screen.
+fn game_card(app: App, game: GameKind, icon: AnyView, blurb: &'static str) -> impl IntoView {
+    let players = format!("{}\u{2013}{} players", game.min_players(), game.max_players());
     view! {
-        <div class="game-icon">{icon}</div>
-        <h2>{title}</h2>
-        <div class="game-players">{players}</div>
-        <p class="game-blurb">{blurb}</p>
-        <div class="game-cta">{footer}</div>
+        <button class="game-card" on:click=move |_| app.screen.set(Screen::Home(game))>
+            <div class="game-icon">{icon}</div>
+            <h2>{game.title()}</h2>
+            <div class="game-players">{players}</div>
+            <p class="game-blurb">{blurb}</p>
+            <div class="game-cta">"Play"</div>
+        </button>
     }
 }
 

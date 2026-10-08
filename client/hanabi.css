@@ -1,0 +1,1062 @@
+/* Hanabi. Ported from the stand-alone client (McM1k/hanabii); every rule is
+   scoped under .hanabi so it can't leak into the other games, which reuse
+   names like .card, .hand and .panel. The custom properties are on :root, as
+   their names don't clash with anything else. */
+
+:root {
+  --night: #0f1626;
+  --night-soft: #182236;
+  --night-softer: #212d45;
+  --paper: #ede8da;
+  --paper-dim: #9aa0ae;
+  --ember: #c97a3d;
+  --ember-dim: #8a5a30;
+
+  --white-fw: #f2efe6;
+  --red-fw: #d1453d;
+  --yellow-fw: #e8b647;
+  --green-fw: #4c9a6a;
+  --blue-fw: #3e7cb1;
+  --orange-fw: #e0762a;
+  --purple-fw: #7d5cc0;
+  /* Deliberately not pure black — the page background is already a dark
+     navy, so this needs its own visible edge (see the border overrides
+     below) to avoid disappearing into it. */
+  --black-fw: #2a2a2a;
+}
+
+.hanabi, .hanabi * {
+  box-sizing: border-box;
+}
+
+.hanabi {
+  margin: 0;
+  background: var(--night);
+  color: var(--paper);
+  font-family: "Inter", system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+.hanabi .app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.hanabi h1 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  font-size: 2.4rem;
+  letter-spacing: -0.01em;
+  margin: 0 0 0.25rem;
+}
+
+/* The page title. In hanabii mode it reads "Hanabii" and opens a box with the
+   mode's rules on hover (or focus, so a tap or the keyboard works too). The
+   box is a child of the title and touches its bottom edge — no gap to cross —
+   so it stays open while the pointer moves down into it. */
+.hanabi .page-title {
+  position: relative;
+  display: inline-block;
+}
+
+.hanabi .page-title-hanabii {
+  cursor: help;
+  outline: none;
+}
+
+.hanabi .mode-popover {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  width: min(28rem, calc(100vw - 3rem));
+  padding: 0.85rem 1rem;
+  background: var(--night-soft);
+  border: 1px solid var(--ember-dim);
+  border-radius: 4px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.85rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
+  color: var(--paper);
+  cursor: default;
+}
+
+.hanabi .mode-popover p {
+  margin: 0 0 0.6rem;
+}
+
+.hanabi .mode-popover p:last-child {
+  margin-bottom: 0;
+}
+
+.hanabi .page-title-hanabii:hover .mode-popover,
+.hanabi .page-title-hanabii:focus .mode-popover,
+.hanabi .page-title-hanabii:focus-within .mode-popover {
+  display: block;
+}
+
+.hanabi h2,
+.hanabi h3 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 500;
+  margin: 0 0 0.75rem;
+}
+
+.hanabi h3 {
+  font-size: 1.1rem;
+  color: var(--paper-dim);
+}
+
+.hanabi .status {
+  color: var(--ember);
+  margin: 0 0 1.5rem;
+}
+
+/* --- shared panel look --- */
+
+.hanabi .panel {
+  background: var(--night-soft);
+  border: 1px solid var(--night-softer);
+  border-radius: 4px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* --- join / lobby --- */
+
+.hanabi .join-form label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--paper-dim);
+  margin-bottom: 1rem;
+}
+
+.hanabi input {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.55rem 0.7rem;
+  background: var(--night);
+  border: 1px solid var(--night-softer);
+  border-radius: 3px;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.hanabi input:focus,
+.hanabi button:focus {
+  outline: 2px solid var(--ember);
+  outline-offset: 1px;
+}
+
+.hanabi button {
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 0.6rem 1.2rem;
+  margin: 0.5rem 0.5rem 0 0;
+  background: var(--ember);
+  color: var(--night);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.hanabi button:disabled {
+  background: var(--night-softer);
+  color: var(--paper-dim);
+  cursor: not-allowed;
+}
+
+.hanabi .roster {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.hanabi .roster li {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--night-softer);
+}
+
+.hanabi .rules-picker {
+  margin-bottom: 1.25rem;
+}
+
+.hanabi .rules-picker h3 {
+  margin-bottom: 0.5rem;
+}
+
+.hanabi .rule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.hanabi .rule-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.hanabi .rule-select select {
+  width: auto;
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  background: var(--night);
+  border: 1px solid var(--night-softer);
+  border-radius: 3px;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+/* The global `input` rule below is meant for text fields — undo the parts
+   that would otherwise stretch this checkbox into a full-width bar. */
+.hanabi .rule-toggle input[type="checkbox"] {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  accent-color: var(--ember);
+  cursor: pointer;
+}
+
+.hanabi .rule-group {
+  margin-bottom: 1rem;
+}
+
+.hanabi .rule-toggle-sub {
+  margin-left: 1.4rem;
+  font-size: 0.85rem;
+  color: var(--paper-dim);
+}
+
+.hanabi .rule-toggle-sub:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Dimmed while the hanabii mode is on: it's a fixed preset that replaces
+   these options, so they show what it plays with but can't be changed. */
+.hanabi .rule-group-locked {
+  opacity: 0.5;
+}
+
+.hanabi .rule-group-locked,
+.hanabi .rule-group-locked .rule-toggle,
+.hanabi .rule-group-locked .rule-toggle input[type="checkbox"],
+.hanabi .rule-group-locked .rule-select select {
+  cursor: default;
+}
+
+/* The group as a whole is already dimmed — don't dim its own disabled
+   sub-toggle a second time on top of that. */
+.hanabi .rule-group-locked .rule-toggle-sub:has(input:disabled) {
+  opacity: 1;
+}
+
+.hanabi .rules-picker h3:not(:first-child) {
+  margin-top: 1.25rem;
+}
+
+.hanabi .rules-picker .hint {
+  margin-top: 0.4rem;
+}
+
+.hanabi .hint {
+  color: var(--paper-dim);
+  font-size: 0.85rem;
+  margin-top: 1rem;
+}
+
+/* --- fireworks: the one bright moment on the page --- */
+
+.hanabi .fireworks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.hanabi .firework {
+  position: relative;
+  flex: 1;
+  /* Keeps room for the burst icon even once several optional suits are
+     active — beyond this, tiles wrap to another row instead of squeezing
+     narrower than their content. */
+  min-width: 4.5rem;
+  text-align: center;
+  padding: 1rem 0.3rem;
+  border-radius: 4px;
+  background: var(--night);
+  border: 1px solid var(--night-softer);
+}
+
+@keyframes firework-flash {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(201, 122, 61, 0);
+  }
+  35% {
+    transform: scale(1.08);
+    box-shadow: 0 0 14px 3px rgba(201, 122, 61, 0.65);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(201, 122, 61, 0);
+  }
+}
+
+.hanabi .firework-flash {
+  animation: firework-flash 0.5s ease;
+}
+
+.hanabi .firework-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--paper-dim);
+  margin-bottom: 0.5rem;
+}
+
+.hanabi .firework-value {
+  display: block;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+.hanabi .firework-burst {
+  display: block;
+  width: 60px;
+  height: 60px;
+  margin: 0.15rem auto;
+}
+
+/* Every firework tile is filled with its own color rather than just tinting
+   the label/value/icon — dark text throughout reads clearly against all six
+   swatches, including the multicolor gradient below. */
+.hanabi .firework-white,
+.hanabi .firework-red,
+.hanabi .firework-yellow,
+.hanabi .firework-green,
+.hanabi .firework-blue,
+.hanabi .firework-multicolor,
+.hanabi .firework-orange,
+.hanabi .firework-purple {
+  border-color: transparent;
+}
+.hanabi .firework-white {
+  background: var(--white-fw);
+}
+.hanabi .firework-red {
+  background: var(--red-fw);
+}
+.hanabi .firework-yellow {
+  background: var(--yellow-fw);
+}
+.hanabi .firework-green {
+  background: var(--green-fw);
+}
+.hanabi .firework-blue {
+  background: var(--blue-fw);
+}
+.hanabi .firework-orange {
+  background: var(--orange-fw);
+}
+.hanabi .firework-purple {
+  background: var(--purple-fw);
+}
+.hanabi .firework-multicolor {
+  /* Same idea as .card-multicolor — a flat swatch can't represent "every
+     color", so match the card tiles' gradient instead of picking an
+     arbitrary solid accent. */
+  background: linear-gradient(135deg, var(--red-fw), var(--yellow-fw), var(--green-fw), var(--blue-fw));
+}
+.hanabi .firework-black {
+  /* Same border concern as .card-black — needs a visible edge against the
+     page background instead of the transparent one the others get. */
+  background: var(--black-fw);
+  border-color: var(--paper-dim);
+}
+
+.hanabi .firework-white .firework-label,
+.hanabi .firework-white .firework-value,
+.hanabi .firework-white .firework-burst,
+.hanabi .firework-red .firework-label,
+.hanabi .firework-red .firework-value,
+.hanabi .firework-red .firework-burst,
+.hanabi .firework-yellow .firework-label,
+.hanabi .firework-yellow .firework-value,
+.hanabi .firework-yellow .firework-burst,
+.hanabi .firework-green .firework-label,
+.hanabi .firework-green .firework-value,
+.hanabi .firework-green .firework-burst,
+.hanabi .firework-blue .firework-label,
+.hanabi .firework-blue .firework-value,
+.hanabi .firework-blue .firework-burst,
+.hanabi .firework-orange .firework-label,
+.hanabi .firework-orange .firework-value,
+.hanabi .firework-orange .firework-burst,
+.hanabi .firework-purple .firework-label,
+.hanabi .firework-purple .firework-value,
+.hanabi .firework-purple .firework-burst,
+.hanabi .firework-multicolor .firework-label,
+.hanabi .firework-multicolor .firework-value,
+.hanabi .firework-multicolor .firework-burst {
+  color: var(--night);
+}
+/* Black's swatch is dark, so — unlike every other suit above — it needs
+   light text rather than dark. */
+.hanabi .firework-black .firework-label,
+.hanabi .firework-black .firework-value,
+.hanabi .firework-black .firework-burst {
+  color: var(--paper);
+}
+
+/* A genuinely complete suit (see `next_expected_rank` in game_board.rs)
+   stops using its ordinary dark/light icon color and starts cycling through
+   the whole color wheel instead — the burst icon and the tile's contour
+   both. One registered angle, animated on the tile and inherited by the
+   icon, drives it; the icon runs half a turn ahead of the contour so the
+   two are never the same color at the same moment.
+
+   `filter` reads `currentColor`, so the glow always matches the icon; the
+   thin dark edge keeps its shape readable in the moments the cycling color
+   happens to match the tile's own fill. Three class-selectors deep
+   specifically to outrank the two-deep per-suit icon rules above
+   (`.firework-white .firework-burst` etc., `.firework-black .firework-burst`
+   included) regardless of source order, since this needs to win for every
+   suit. */
+@property --cycle-hue {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+@keyframes firework-cycle {
+  to {
+    --cycle-hue: 360deg;
+  }
+}
+
+.hanabi .firework-complete .firework-burst.firework-burst--complete {
+  color: oklch(0.8 0.17 calc(var(--cycle-hue) + 180deg));
+  filter: drop-shadow(0 0 1px var(--night)) drop-shadow(0 0 3px currentColor);
+}
+
+.hanabi .firework-complete {
+  border-color: oklch(0.8 0.17 var(--cycle-hue));
+  box-shadow: 0 0 10px 1px oklch(0.8 0.17 var(--cycle-hue) / 0.5);
+  animation: firework-cycle 4s linear infinite;
+}
+
+/* A play that completes a suit is also the one that flashes the tile — run
+   both together rather than letting one animation shorthand replace the
+   other. */
+.hanabi .firework-complete.firework-flash {
+  animation: firework-cycle 4s linear infinite, firework-flash 0.5s ease;
+}
+
+/* No cycling for people who've asked for less motion: hold it at the amber
+   the contour used to be. */
+@media (prefers-reduced-motion: reduce) {
+  .hanabi .firework-complete,
+.hanabi .firework-complete.firework-flash {
+    --cycle-hue: 65deg;
+    animation: none;
+  }
+}
+
+.hanabi .firework-short-badge {
+  /* Its own self-contained chip rather than trying to match each tile's
+     text color — stays legible regardless of what's underneath. */
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 0.55rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  border-radius: 3px;
+  background: var(--night);
+  color: var(--paper);
+}
+
+.hanabi .tokens {
+  color: var(--paper-dim);
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem;
+}
+
+.hanabi .pip-row {
+  letter-spacing: 0.15em;
+}
+
+/* --- cards --- */
+
+.hanabi .hand {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.75rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  will-change: transform;
+}
+
+.hanabi .hand-main {
+  flex: 1;
+  /* Let the card row actually wrap/shrink inside the flex layout instead
+     of forcing .hand wider than its container. */
+  min-width: 0;
+}
+
+.hanabi .hand:last-child {
+  margin-bottom: 0;
+}
+
+.hanabi .hand-current {
+  background: var(--night-softer);
+  animation: turn-highlight 0.6s ease-out;
+}
+
+.hanabi .hand-selected {
+  border-color: var(--ember);
+}
+
+.hanabi .hand-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.hanabi .hand-header h3 {
+  margin: 0;
+}
+
+@keyframes turn-highlight {
+  0% {
+    background: var(--ember-dim);
+  }
+  100% {
+    background: var(--night-softer);
+  }
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.hanabi .now-playing {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.55rem;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: var(--ember);
+  color: var(--night);
+  border-radius: 999px;
+  vertical-align: middle;
+  animation: badge-pop 0.35s ease-out;
+}
+
+.hanabi .player-name {
+  display: inline-block;
+  cursor: pointer;
+}
+
+.hanabi .player-name:hover {
+  color: var(--ember);
+}
+
+.hanabi .clue-options {
+  flex-shrink: 0;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--night-softer);
+}
+
+/* The small "what this player was just told" replica shown to the right of
+   a hand that just received a clue — see `clue_image`/`received_clue_badge`
+   in game_board.rs. Same left-border treatment as .clue-options, so on a
+   hand that's both showing this *and* selected as a clue target, the two
+   read as clearly separate zones rather than a jumble. */
+.hanabi .received-clue {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--night-softer);
+  animation: badge-pop 0.35s ease-out;
+}
+
+/* An exact visual copy of the clue button that was clicked — purely
+   decorative, not a real control. */
+.hanabi .clue-image {
+  pointer-events: none;
+  cursor: default;
+}
+
+.hanabi .clue-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+/* Colors on one line, numbers on the next. */
+.hanabi .clue-buttons + .clue-buttons {
+  margin-top: 0.4rem;
+}
+
+.hanabi .clue-btn {
+  margin: 0;
+  padding: 0.4rem 0.9rem;
+}
+
+.hanabi .cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hanabi .card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3rem;
+  height: 3.1rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.hanabi .card-clue-target {
+  /* Preview of what a hovered clue button would touch — offset so it
+     doesn't compete with the card's own border. */
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+@keyframes card-recent-draw-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--ember), 0 0 10px 2px rgba(201, 122, 61, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--ember), 0 0 16px 5px rgba(201, 122, 61, 0.85);
+  }
+}
+
+/* The cards the latest clue just touched, on every screen, for a moment.
+   Like .card-recent-draw this is driven by a signal that adds and removes the
+   class (see game_board.rs), so it simply pulses for as long as the class is
+   there. White, so it can't be mistaken for the amber draw glow or the amber
+   hover preview outline. */
+.hanabi .card-touched {
+  position: relative;
+  z-index: 1;
+  animation: card-touched-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes card-touched-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 8px 2px rgba(255, 255, 255, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 3px #fff, 0 0 18px 6px rgba(255, 255, 255, 0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanabi .card-touched {
+    animation: none;
+    box-shadow: 0 0 0 3px #fff, 0 0 14px 4px rgba(255, 255, 255, 0.7);
+  }
+}
+
+.hanabi .card-recent-draw {
+  /* Driven by a real signal (set on draw, cleared by its own timeout, see
+     game_board.rs) rather than a one-shot animation fired at render time —
+     that way it's reliably visible for a fixed stretch regardless of
+     whether the underlying element is a fresh DOM node or one Leptos
+     reused from a previous render. */
+  animation: card-recent-draw-pulse 0.6s ease-in-out infinite;
+}
+
+.hanabi .card-white {
+  background: var(--white-fw);
+  color: var(--night);
+}
+.hanabi .card-red {
+  background: var(--red-fw);
+  color: var(--paper);
+}
+.hanabi .card-yellow {
+  background: var(--yellow-fw);
+  color: var(--night);
+}
+.hanabi .card-green {
+  background: var(--green-fw);
+  color: var(--paper);
+}
+.hanabi .card-blue {
+  background: var(--blue-fw);
+  color: var(--paper);
+}
+.hanabi .card-orange {
+  background: var(--orange-fw);
+  color: var(--night);
+}
+.hanabi .card-purple {
+  background: var(--purple-fw);
+  color: var(--paper);
+}
+.hanabi .card-multicolor {
+  /* Can't be a flat swatch like the others — it's the wild suit, so it
+     reads visually as "every color at once". */
+  background: linear-gradient(135deg, var(--red-fw), var(--yellow-fw), var(--green-fw), var(--blue-fw));
+  color: var(--night);
+}
+.hanabi .card-black {
+  background: var(--black-fw);
+  color: var(--paper);
+  /* The other suits' default border (a faint dark line) would be
+     invisible against this background, so it needs a lighter one. */
+  border-color: var(--paper-dim);
+}
+
+.hanabi .card-own {
+  position: relative;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.25rem;
+  text-align: center;
+  line-height: 1.2;
+  /* Unlike a simple single-line colored card, this one can grow a bit
+     taller to fit the ruled-out marks below — the fixed height on .card is
+     for the common, uncluttered case. */
+  height: auto;
+  min-height: 3.1rem;
+}
+
+.hanabi .card-unknown {
+  background: var(--night-softer);
+  color: var(--paper-dim);
+}
+
+/* Hanabii mode: a card whose color isn't certain yet keeps its neutral face
+   and gets a spinning ring around it made of every color it could still be
+   (equal hard-edged arcs; the list comes from the app as --ring-stops on the
+   card). Once the color is certain the whole face turns that color instead
+   (.card-<color> above).
+
+   The ring is drawn on ::after, masked down to just the edge, so it never
+   changes the card's size and never covers what's written on it. Its angle is
+   a registered property so the gradient can be animated in place — without
+   that (older browsers) the ring simply doesn't spin. */
+@property --ring-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.hanabi .card-ring {
+  position: relative; /* the ring is drawn on ::after — other players' cards aren't positioned otherwise */
+}
+
+.hanabi .card-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 3px; /* the ring's thickness */
+  background: conic-gradient(from var(--ring-angle), var(--ring-stops));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: card-ring-spin 3s linear infinite;
+}
+
+@keyframes card-ring-spin {
+  to {
+    --ring-angle: 360deg;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hanabi .card-ring::after {
+    animation: none;
+  }
+}
+
+.hanabi .not-row {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.1rem;
+}
+
+.hanabi .not-mark {
+  font-size: 0.55rem;
+  text-decoration: line-through;
+  opacity: 0.85;
+}
+
+/* The numbers a card has been ruled out for are now most of what an
+   unknown card has to show (no "?" placeholder, no card id), so they get
+   real size — three fit across a card's face, and a second row takes
+   the rest. */
+.hanabi .not-row-numbers {
+  gap: 0.05rem 0.2rem;
+}
+
+.hanabi .not-row-numbers .not-mark {
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.hanabi .not-mark-white {
+  color: var(--white-fw);
+}
+.hanabi .not-mark-red {
+  color: var(--red-fw);
+}
+.hanabi .not-mark-yellow {
+  color: var(--yellow-fw);
+}
+.hanabi .not-mark-green {
+  color: var(--green-fw);
+}
+.hanabi .not-mark-blue {
+  color: var(--blue-fw);
+}
+.hanabi .not-mark-orange {
+  color: var(--orange-fw);
+}
+.hanabi .not-mark-purple {
+  color: var(--purple-fw);
+}
+
+.hanabi .card-hint {
+  font-size: 0.72rem;
+  /* Was a fixed light color, but the card can now be colored like any
+     other suit once enough is known — inherit whatever text color that
+     suit's rule set instead, so it stays legible either way. */
+  color: inherit;
+}
+
+/* A number the player *knows* is the biggest thing on their card — much
+   bigger than the small struck-through numbers a card has been ruled out
+   for, so the two can't be mixed up. Fits above the multicolor "M?" flag
+   without making the card any taller than its usual minimum. */
+.hanabi .card-number {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: inherit;
+}
+
+/* On a card whose color isn't known yet (dim text by default) a known number
+   is also the brightest thing on it, against the dim struck-through ones. */
+.hanabi .card-unknown .card-number {
+  color: var(--paper);
+}
+
+.hanabi .card-own[draggable="true"] {
+  cursor: grab;
+}
+
+.hanabi .drop-zone {
+  border-style: dashed;
+}
+
+.hanabi .drop-zone.disabled {
+  opacity: 0.6;
+}
+
+.hanabi .drop-zone.drag-active {
+  border-style: solid;
+  border-color: var(--ember);
+  background: var(--night-softer);
+  box-shadow: 0 0 0 1px var(--ember);
+}
+
+/* --- discard pile: grouped by color, compact for small screens --- */
+
+.hanabi .discard-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+@keyframes discard-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(201, 122, 61, 0);
+  }
+  35% {
+    box-shadow: 0 0 0 3px rgba(201, 122, 61, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 122, 61, 0);
+  }
+}
+
+.hanabi .discard-flash {
+  animation: discard-flash 0.5s ease;
+  border-radius: 4px;
+}
+
+.hanabi .discard-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hanabi .discard-color-label {
+  flex-shrink: 0;
+  width: 3.4rem;
+  font-size: 0.7rem;
+  color: var(--paper-dim);
+}
+
+.hanabi .discard-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.hanabi .chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.hanabi .last-move {
+  font-size: 0.8rem;
+  color: var(--paper-dim);
+  font-style: italic;
+}
+
+/* Below this width there isn't room for the clue panel beside the hand
+   without squeezing the card row — fall back to stacking it underneath. */
+@media (max-width: 520px) {
+  .hanabi .hand {
+    flex-direction: column;
+  }
+
+  .hanabi .clue-options {
+    flex-shrink: 1;
+    padding-left: 0;
+    padding-top: 0.75rem;
+    border-left: none;
+    border-top: 1px solid var(--night-softer);
+  }
+}
+
+
+/* --- additions for the shared room system --- */
+
+.hanabi .code-input {
+  text-align: center;
+  font-size: 1.4rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+}
+
+.hanabi .room-code {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 2.6rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  color: var(--ember);
+  margin: 0.2rem 0 1rem;
+}
+
+/* A button that reads as a link: "All games", "Leave room". */
+.hanabi button.link {
+  background: none;
+  color: var(--paper-dim);
+  text-decoration: underline;
+  padding: 0.2rem;
+  margin: 0.75rem 0 0;
+}
+
+.hanabi button.link:hover:not(:disabled) {
+  color: var(--paper);
+}
+
+.hanabi .tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.65rem;
+  border-radius: 999px;
+  background: var(--night-softer);
+  color: var(--paper-dim);
+  vertical-align: middle;
+}
+
+.hanabi .tag-off {
+  background: #5a2a2a;
+  color: var(--paper);
+}
+
+.hanabi .room-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--paper-dim);
+}
+
+.hanabi .room-bar button.link {
+  margin: 0;
+}
+
+.hanabi .room-tag {
+  letter-spacing: 0.15em;
+  color: var(--ember);
+}
+
+.hanabi .status-line {
+  margin: 0 0 1rem;
+  font-weight: 600;
+  color: var(--ember);
+}

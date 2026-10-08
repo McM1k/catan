@@ -1,0 +1,8 @@
+[package]
+name = "hanabi-core"
+version = "0.1.0"
+edition = "2021"
+description = "Hanabi rules engine (imported from McM1k/hanabii, crates/game-core)"
+
+[dependencies]
+serde = { workspace = true }

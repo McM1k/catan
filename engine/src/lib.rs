@@ -5,7 +5,6 @@
 
 mod board;
 mod game;
-pub mod protocol;
 
 pub use board::*;
 pub use game::*;

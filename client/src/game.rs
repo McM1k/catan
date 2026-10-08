@@ -1,11 +1,11 @@
 use crate::board::{board_svg, robber_victims, PLAYER_COLORS};
 use crate::state::{leave, send, App, Mode, Picker};
-use engine::protocol::ClientMsg;
+use protocol::ClientMsg;
 use engine::{Action, DevCard, GameView, Hand, Phase, Resource, SetupExpect};
 use leptos::prelude::*;
 
 fn act(app: App, a: Action) {
-    send(app, &ClientMsg::Act(a));
+    send(app, &ClientMsg::Colonists(a));
 }
 
 fn sum(h: [u8; 5]) -> u32 {

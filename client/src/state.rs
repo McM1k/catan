@@ -1,31 +1,41 @@
-use engine::protocol::{ClientMsg, LobbyPlayer, ServerMsg};
+use crate::hanabi;
 use engine::{Building, GameView};
 use leptos::prelude::*;
+use protocol::{ClientMsg, GameKind, LobbyPlayer, ServerMsg};
 use std::time::Duration;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{MessageEvent, WebSocket};
 
-const KEY_ROOM: &str = "colonists.room";
-const KEY_TOKEN: &str = "colonists.token";
-pub const KEY_NAME: &str = "colonists.name";
+const KEY_ROOM: &str = "games.room";
+const KEY_TOKEN: &str = "games.token";
+pub const KEY_NAME: &str = "games.name";
 
 #[derive(Clone)]
 pub enum Screen {
     /// Pick a game.
     Menu,
     /// Name + create/join a room for the chosen game.
-    Home,
+    Home(GameKind),
+    /// The waiting room. Which game it is for comes with the room: the code
+    /// decides, whatever was picked in the menu.
     Lobby {
         room: String,
+        game: GameKind,
         players: Vec<LobbyPlayer>,
+        /// Our own seat, i.e. our index in `players`.
+        you: usize,
         is_host: bool,
     },
+    /// A running Colonists game.
     Game {
         view: Box<GameView>,
         connected: Vec<bool>,
         room: String,
     },
+    /// A running Hanabi game. Carries no data on purpose: the state lives in
+    /// `App::hanabi`, so updates don't rebuild the board (see `hanabi::Signals`).
+    HanabiGame,
 }
 
 /// How long a changed piece keeps its ember contour.
@@ -141,6 +151,8 @@ pub struct App {
     /// Board changes still showing their ember contour.
     pub fresh: RwSignal<Vec<Fresh>>,
     snap: StoredValue<Option<Snap>>,
+    /// Everything about the Hanabi game and lobby.
+    pub hanabi: hanabi::Signals,
 }
 
 impl App {
@@ -154,6 +166,7 @@ impl App {
             room_input: RwSignal::new(String::new()),
             fresh: RwSignal::new(vec![]),
             snap: StoredValue::new(None),
+            hanabi: hanabi::Signals::new(),
             ui: Ui {
                 mode: RwSignal::new(Mode::None),
                 robber_tile: RwSignal::new(None),
@@ -271,22 +284,41 @@ fn handle(app: App, msg: ServerMsg) {
         ServerMsg::Joined { room, token } => {
             save(KEY_ROOM, &room);
             save(KEY_TOKEN, &token);
+            app.hanabi.room.set(room);
             app.error.set(None);
         }
         ServerMsg::Lobby {
             room,
+            game,
             players,
+            you,
             is_host,
-            ..
+            rules,
         } => {
             app.snap.set_value(None);
-            app.screen.set(Screen::Lobby {
-                room,
-                players,
-                is_host,
-            })
+            app.hanabi.room.set(room.clone());
+            if let Some(rules) = rules {
+                app.hanabi.rules.set(rules);
+            }
+            // The lobby is sent again whenever somebody joins, leaves or the
+            // host changes a rule. Only rebuild the screen when what it shows
+            // changed (the rules have their own signal), so the controls the
+            // host is using aren't torn down under their cursor.
+            let unchanged = app.screen.with_untracked(|s| {
+                matches!(s, Screen::Lobby { room: r, game: g, players: p, you: y, is_host: h }
+                    if *r == room && *g == game && *p == players && *y == you && *h == is_host)
+            });
+            if !unchanged {
+                app.screen.set(Screen::Lobby {
+                    room,
+                    game,
+                    players,
+                    you,
+                    is_host,
+                });
+            }
         }
-        ServerMsg::State { view, connected } => {
+        ServerMsg::ColonistsState { view, connected } => {
             note_changes(app, &view);
             let room = load(KEY_ROOM).unwrap_or_default();
             app.screen.set(Screen::Game {
@@ -295,9 +327,22 @@ fn handle(app: App, msg: ServerMsg) {
                 room,
             })
         }
+        ServerMsg::HanabiState {
+            view,
+            names,
+            connected,
+        } => {
+            app.hanabi.names.set(names);
+            app.hanabi.connected.set(connected);
+            app.hanabi.view.set(Some(*view));
+            // The board is built once; later states only change its signals.
+            if !matches!(app.screen.get_untracked(), Screen::HanabiGame) {
+                app.screen.set(Screen::HanabiGame);
+            }
+        }
         ServerMsg::Error(e) => {
             // A failed automatic rejoin means the saved session is dead.
-            if matches!(app.screen.get_untracked(), Screen::Menu | Screen::Home) {
+            if matches!(app.screen.get_untracked(), Screen::Menu | Screen::Home(_)) {
                 clear_session();
             }
             show_error(app, e);
@@ -337,12 +382,36 @@ fn note_changes(app: App, view: &GameView) {
     );
 }
 
+/// Opens a room for `game` under the name typed on the home screen.
+pub fn create_room(app: App, game: GameKind) {
+    let name = app.name.get_untracked();
+    save(KEY_NAME, &name);
+    send(app, &ClientMsg::Create { game, name });
+}
+
+/// Joins the room whose code is typed on the home screen. The code decides
+/// which game you land in.
+pub fn join_room(app: App) {
+    let name = app.name.get_untracked();
+    save(KEY_NAME, &name);
+    send(
+        app,
+        &ClientMsg::Join {
+            room: app.room_input.get_untracked(),
+            name,
+            token: None,
+        },
+    );
+}
+
 pub fn leave(app: App) {
     send(app, &ClientMsg::Leave);
     clear_session();
     app.snap.set_value(None);
     app.fresh.set(vec![]);
+    // Leave the screen first, so the Hanabi board is gone before its state is.
     app.screen.set(Screen::Menu);
+    app.hanabi.reset();
 }
 
 #[cfg(test)]

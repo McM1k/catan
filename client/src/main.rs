@@ -1,31 +1,84 @@
+// The views nest deeply; the compiler needs room to work out their types.
+#![recursion_limit = "256"]
+
 mod art;
 mod board;
 mod game;
+mod hanabi;
 mod home;
 mod menu;
 mod state;
 
 use leptos::prelude::*;
+use protocol::GameKind;
 use state::{connect, App, Screen};
+
+/// A Colonists screen. Its stylesheet is scoped under `.theme-colonists`, so
+/// the games can't restyle each other.
+fn colonists(content: impl IntoView + 'static) -> AnyView {
+    view! { <div class="theme-colonists">{content.into_any()}</div> }.into_any()
+}
+
+/// A Hanabi screen: the same, under `.hanabi` (see `hanabi::screens::shell`).
+fn hanabi_page(app: App, content: impl IntoView + 'static) -> AnyView {
+    hanabi::screens::shell(app, content.into_any()).into_any()
+}
+
+/// Whatever the current screen says should be shown.
+fn current_screen(app: App) -> AnyView {
+    match app.screen.get() {
+        Screen::Menu => menu::menu_screen(app).into_any(),
+        Screen::Home(GameKind::Colonists) => colonists(home::home_screen(app)),
+        Screen::Home(GameKind::Hanabi) => hanabi_page(app, hanabi::screens::home_screen(app)),
+        Screen::Lobby {
+            room,
+            game: GameKind::Colonists,
+            players,
+            is_host,
+            ..
+        } => colonists(home::lobby_screen(app, room, players, is_host)),
+        Screen::Lobby {
+            room,
+            game: GameKind::Hanabi,
+            players,
+            you,
+            is_host,
+        } => hanabi_page(app, hanabi::screens::lobby_screen(app, room, players, you, is_host)),
+        Screen::Game { view, connected, room } => colonists(game::game_screen(app, *view, connected, room)),
+        Screen::HanabiGame => hanabi_page(app, hanabi::board::board(app)),
+    }
+}
+
+/// The title of the browser tab: the game on screen, or just "Games".
+fn page_title(app: App) -> &'static str {
+    let game = app.screen.with(|screen| match screen {
+        Screen::Menu => None,
+        Screen::Home(game) | Screen::Lobby { game, .. } => Some(*game),
+        Screen::Game { .. } => Some(GameKind::Colonists),
+        Screen::HanabiGame => Some(GameKind::Hanabi),
+    });
+    match game {
+        None => "Games",
+        Some(GameKind::Colonists) => "Colonists",
+        Some(GameKind::Hanabi) => hanabi::screens::tab_title(app),
+    }
+}
 
 #[component]
 fn Root() -> impl IntoView {
     let app = App::new();
     connect(app);
 
+    Effect::new(move |_| document().set_title(page_title(app)));
+
     view! {
-        <div class="app">
+        <div class="root">
             {move || {
                 let err = app.error.get();
                 err.map(|e| view! { <div class="toast">{e}</div> })
             }}
             {move || (!app.online.get()).then(|| view! { <div class="offline-banner">"Connecting to server…"</div> })}
-            {move || match app.screen.get() {
-                Screen::Menu => menu::menu_screen(app).into_any(),
-                Screen::Home => home::home_screen(app).into_any(),
-                Screen::Lobby { room, players, is_host } => home::lobby_screen(app, room, players, is_host).into_any(),
-                Screen::Game { view, connected, room } => game::game_screen(app, *view, connected, room).into_any(),
-            }}
+            {move || current_screen(app)}
         </div>
     }
 }
@@ -35,14 +88,16 @@ fn main() {
     leptos::mount::mount_to_body(Root);
 }
 
-/// Native render smoke tests: build real game states with the engine and
+/// Native render smoke tests: build real game states with the engines and
 /// render every screen to HTML, catching panics (bad indexing, unwraps)
 /// that the type checker can't see. These do not replace a browser test.
 #[cfg(test)]
 mod render_tests {
     use super::*;
     use engine::{Action, Game, Phase, Rules, SetupExpect};
+    use hanabi_core::{GameRules, GameState, PlayerId};
     use leptos::tachys::view::RenderHtml;
+    use protocol::LobbyPlayer;
     use rand::{rngs::StdRng, SeedableRng};
 
     fn game_after_setup(n: usize) -> (Game, StdRng) {
@@ -157,36 +212,148 @@ mod render_tests {
         });
     }
 
+    fn players(names: &[&str]) -> Vec<LobbyPlayer> {
+        names
+            .iter()
+            .map(|n| LobbyPlayer { name: n.to_string(), connected: true })
+            .collect()
+    }
+
     #[test]
-    fn menu_lists_both_games() {
+    fn menu_lists_both_games_and_leads_to_their_rooms() {
         let owner = Owner::new();
         owner.with(|| {
             let app = App::new();
-            // Starts on the menu; Colonists opens its room screen, Hanabi is greyed out until configured.
             assert!(matches!(app.screen.get_untracked(), Screen::Menu));
-            let html = menu::menu_view(app, None).to_html();
+            let html = current_screen(app).to_html();
+            assert!(html.contains("Pick a game") && html.contains("menu-page"));
             assert!(html.contains("Colonists") && html.contains("Hanabi"));
-            assert!(html.contains("Not connected yet"));
-            assert!(!html.contains("href="));
+            assert!(html.contains("2\u{2013}4 players") && html.contains("2\u{2013}5 players"));
+            // Both games are playable here: no greyed-out card, no outside link.
+            assert!(!html.contains("disabled") && !html.contains("href="));
+            assert_eq!(page_title(app), "Games");
 
-            let html = menu::menu_view(app, Some("https://example.com/hanabi")).to_html();
-            assert!(html.contains("href=\"https://example.com/hanabi\""));
-            assert!(!html.contains("Not connected yet"));
+            app.screen.set(Screen::Home(GameKind::Colonists));
+            let html = current_screen(app).to_html();
+            assert!(html.contains("theme-colonists") && html.contains("Create a room"));
+            assert!(!html.contains("class=\"hanabi\""));
+            assert_eq!(page_title(app), "Colonists");
+
+            app.screen.set(Screen::Home(GameKind::Hanabi));
+            let html = current_screen(app).to_html();
+            assert!(html.contains("class=\"hanabi\"") && html.contains("Create a room"));
+            assert!(html.contains("Join room") && html.contains("All games"));
+            assert!(!html.contains("theme-colonists"));
+            assert_eq!(page_title(app), "Hanabi");
         });
     }
 
     #[test]
-    fn home_and_lobby_render() {
+    fn the_room_code_decides_which_lobby_you_land_in() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let app = App::new();
+            let lobby = |game| Screen::Lobby {
+                room: "WXYZ".into(),
+                game,
+                players: players(&["Ann", "Bob"]),
+                you: 1,
+                is_host: false,
+            };
+
+            // Picked Colonists in the menu, but the code belongs to a Hanabi room.
+            app.screen.set(Screen::Home(GameKind::Colonists));
+            app.screen.set(lobby(GameKind::Hanabi));
+            let html = current_screen(app).to_html();
+            assert!(html.contains("WXYZ") && html.contains("Hanabii mode"));
+            assert!(html.contains("Waiting for the host to pick the rules"));
+            assert!(html.contains("Bob") && html.contains("(you)"));
+            assert!(!html.contains("Start game"));
+
+            app.screen.set(lobby(GameKind::Colonists));
+            let html = current_screen(app).to_html();
+            assert!(html.contains("WXYZ") && html.contains("Waiting for the host to start"));
+            assert!(!html.contains("Hanabii mode"));
+        });
+    }
+
+    #[test]
+    fn colonists_lobby_renders() {
         let owner = Owner::new();
         owner.with(|| {
             let app = App::new();
             assert!(home::home_screen(app).to_html().contains("Create a room"));
             let players = vec![
-                engine::protocol::LobbyPlayer { name: "Ann".into(), connected: true },
-                engine::protocol::LobbyPlayer { name: "Bob".into(), connected: false },
+                protocol::LobbyPlayer { name: "Ann".into(), connected: true },
+                protocol::LobbyPlayer { name: "Bob".into(), connected: false },
             ];
             let html = home::lobby_screen(app, "WXYZ".into(), players, true).to_html();
             assert!(html.contains("WXYZ") && html.contains("Start game"));
+            assert!(html.contains("offline"));
+        });
+    }
+
+    #[test]
+    fn hanabi_lobby_lets_only_the_host_pick_rules_and_start() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let app = App::new();
+            let seats = players(&["Ann", "Bob", "Cy"]);
+            let host = hanabi::screens::lobby_screen(app, "WXYZ".into(), seats.clone(), 0, true).to_html();
+            assert!(host.contains("WXYZ") && host.contains("Start game"));
+            assert!(host.contains("Hanabii mode") && host.contains("Multicolor suit"));
+            assert!(host.contains("Black powder suit") && host.contains("Six-card suits"));
+            assert!(host.contains("Ann") && host.contains("(you)") && host.contains("host"));
+            assert!(host.contains("Leave room"));
+            // The start button is enabled with three players...
+            assert!(host.contains("Everyone who's here is in"));
+            assert!(!host.contains("Needs at least 2 players"));
+            // ...and the rules are editable. Only the "1 of each card" sub-options
+            // of suits that aren't switched on are locked.
+            assert_eq!(host.matches("disabled").count(), 3, "{host}");
+
+            // Alone, the host can't start yet.
+            let alone = hanabi::screens::lobby_screen(app, "WXYZ".into(), players(&["Ann"]), 0, true).to_html();
+            assert!(alone.contains("Needs at least 2 players"));
+
+            // A guest sees the same rules, locked, and no start button.
+            let guest = hanabi::screens::lobby_screen(app, "WXYZ".into(), seats, 2, false).to_html();
+            assert!(guest.contains("Hanabii mode") && guest.contains("Cy") && guest.contains("(you)"));
+            assert!(!guest.contains("Start game"));
+            assert!(guest.contains("Waiting for the host to pick the rules and start the game"));
+            // Every control is locked for them (the mode, both suits and their
+            // sub-options, the extra-colors count and its sub-option, six cards).
+            assert_eq!(guest.matches("disabled").count(), 8, "{guest}");
+
+            // A seat whose connection dropped says so.
+            let mut seats = players(&["Ann", "Bob"]);
+            seats[1].connected = false;
+            let html = hanabi::screens::lobby_screen(app, "WXYZ".into(), seats, 0, true).to_html();
+            assert!(html.contains("offline"));
+        });
+    }
+
+    #[test]
+    fn hanabii_mode_locks_the_other_rules_and_retitles_the_page() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let app = App::new();
+            let ordinary = hanabi::screens::shell(app, hanabi::screens::lobby_screen(app, "WXYZ".into(), players(&["A", "B"]), 0, true)).to_html();
+            assert!(ordinary.contains("<h1>Hanabi</h1>") && !ordinary.contains("mode-popover"));
+            assert!(!ordinary.contains("rule-group-locked"));
+            app.screen.set(Screen::HanabiGame);
+            assert_eq!(page_title(app), "Hanabi");
+
+            app.hanabi.rules.set(GameRules { hanabii: true, ..Default::default() }.normalized());
+            let html = hanabi::screens::shell(app, hanabi::screens::lobby_screen(app, "WXYZ".into(), players(&["A", "B"]), 0, true)).to_html();
+            assert!(html.contains("<h1>Hanabii</h1>") && html.contains("mode-popover"));
+            assert!(html.contains("rule-group-locked"));
+            assert_eq!(page_title(app), "Hanabii");
+
+            // Once the game runs, what it is played with decides.
+            let state = GameState::new(2, 3, GameRules::default());
+            app.hanabi.view.set(Some(state.view_for(PlayerId(0))));
+            assert_eq!(page_title(app), "Hanabi");
         });
     }
 }

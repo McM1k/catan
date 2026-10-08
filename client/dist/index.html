@@ -3,12 +3,20 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Colonists</title>
-    <link rel="stylesheet" href="/style-d6f66a39a3a9ceef.css" integrity="sha384-ySqQPzMGeorsPk9kF71tbpaSzmOUOeQPaxjUxmHytrXlwk5X23WOhP26CBeOKkxP"/>
+    <title>Games</title>
+    <!-- Hanabi's typefaces; the other screens use the system font. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style-44f2507da3b4d054.css" integrity="sha384-WZ6UkTC6I/Bitaj/NKRIA0WfIdZLE3SWOOyNp4e6/tORCut2RKLi5hEr4/X84f0t"/>
+    <link rel="stylesheet" href="/hanabi-201b058decda5c7b.css" integrity="sha384-ye/Q350gzZ/RMFtQTW4krfw8d8vGhJLmet6ouzaNwAu8DivK0K9XTlXbJAZ8g7fq"/>
     
 <script type="module">
-import init, * as bindings from '/client-b2f85319c222000d.js';
-const wasm = await init({ module_or_path: '/client-b2f85319c222000d_bg.wasm' });
+import init, * as bindings from '/client-c54cde62ed096071.js';
+const wasm = await init({ module_or_path: '/client-c54cde62ed096071_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -17,6 +25,6 @@ window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
-  <link rel="modulepreload" href="/client-b2f85319c222000d.js" crossorigin="anonymous" integrity="sha384-XdkpcPKfcw5iCVX++edzPFRhQ1wlZReIP3g5iqBfXnaLSLSlABfc+FWpdA5JCPHy"><link rel="preload" href="/client-b2f85319c222000d_bg.wasm" crossorigin="anonymous" integrity="sha384-ubkGYBYsBClv62z572BRZha9ycfPPA0MwLW5L3sdYrhc1+ilwTwkSTzGEKnLUFZF" as="fetch" type="application/wasm"></head>
+  <link rel="modulepreload" href="/client-c54cde62ed096071.js" crossorigin="anonymous" integrity="sha384-5WVdRSx/ZR+jq8a5TV0q8V3unNQQS6ttnQAtJHpg7SwZGfSTZa9QwjupqAqrH4wA"><link rel="preload" href="/client-c54cde62ed096071_bg.wasm" crossorigin="anonymous" integrity="sha384-885nR1C/wT4752cY/kGOIKKjyhdPJWgPA8m9lJq4y2hopWdvw4qgRjTt/RpcFada" as="fetch" type="application/wasm"></head>
   <body></body>
 </html>
