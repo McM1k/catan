@@ -358,11 +358,12 @@ fn draft_panel(ctx: &Ctx) -> AnyView {
         view! { <p class="caption">{format!("Passing on to {to}")}</p> }
     });
 
+    // Kept cards show what recycling them gives, to help plan the rest of the draft.
     let kept = (!view.drafted.is_empty()).then(|| {
         let cards = view
             .drafted
             .iter()
-            .map(|&card| view! { <li>{card_static(card.def(), false, false, "")}</li> })
+            .map(|&card| view! { <li>{card_static(card.def(), false, true, "")}</li> })
             .collect_view();
         view! {
             <h3 class="subhead">
@@ -1235,6 +1236,16 @@ mod tests {
         let bob = render(&state, 1);
         assert!(bob.contains("Pick a card") && !bob.contains("Your pick is in"));
         assert!(bob.contains("Ann"));
+
+        // Once everybody has picked, the pick is kept, still showing what recycling it gives.
+        for seat in 1..3 {
+            let card = state.players[seat].hand[0];
+            state.apply(seat, Action::Draft { card }).unwrap();
+        }
+        let html = render(&state, 0);
+        let kept = &html[html.find("Kept so far").expect("the kept cards")..];
+        let kept = &kept[..kept.find("</ul>").unwrap()];
+        assert!(kept.contains(hand[2].def().name) && kept.contains("Recycles to"), "{kept}");
     }
 
     #[test]
