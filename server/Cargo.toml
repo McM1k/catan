@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 engine = { path = "../engine" }
 hanabi-core = { path = "../hanabi-core" }
+wonderful-core = { path = "../wonderful-core" }
 protocol = { path = "../protocol" }
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["full"] }

@@ -1,4 +1,4 @@
-use crate::hanabi;
+use crate::{hanabi, wonderful};
 use engine::{Building, GameView};
 use leptos::prelude::*;
 use protocol::{ClientMsg, GameKind, LobbyPlayer, ServerMsg};
@@ -36,6 +36,15 @@ pub enum Screen {
     /// A running Hanabi game. Carries no data on purpose: the state lives in
     /// `App::hanabi`, so updates don't rebuild the board (see `hanabi::Signals`).
     HanabiGame,
+    /// A running It's a Wonderful World game. Like Colonists it carries the
+    /// state and is rebuilt on every message; what has to outlive that (the
+    /// piece picked in the tray) is in `App::wonderful`.
+    WonderfulGame {
+        view: Box<wonderful_core::View>,
+        names: Vec<String>,
+        connected: Vec<bool>,
+        room: String,
+    },
 }
 
 /// How long a changed piece keeps its ember contour.
@@ -153,6 +162,8 @@ pub struct App {
     snap: StoredValue<Option<Snap>>,
     /// Everything about the Hanabi game and lobby.
     pub hanabi: hanabi::Signals,
+    /// The interface state of the It's a Wonderful World board.
+    pub wonderful: wonderful::Ui,
 }
 
 impl App {
@@ -167,6 +178,7 @@ impl App {
             fresh: RwSignal::new(vec![]),
             snap: StoredValue::new(None),
             hanabi: hanabi::Signals::new(),
+            wonderful: wonderful::Ui::new(),
             ui: Ui {
                 mode: RwSignal::new(Mode::None),
                 robber_tile: RwSignal::new(None),
@@ -340,6 +352,19 @@ fn handle(app: App, msg: ServerMsg) {
                 app.screen.set(Screen::HanabiGame);
             }
         }
+        ServerMsg::WonderfulState {
+            view,
+            names,
+            connected,
+        } => {
+            let room = load(KEY_ROOM).unwrap_or_default();
+            app.screen.set(Screen::WonderfulGame {
+                view,
+                names,
+                connected,
+                room,
+            })
+        }
         ServerMsg::Error(e) => {
             // A failed automatic rejoin means the saved session is dead.
             if matches!(app.screen.get_untracked(), Screen::Menu | Screen::Home(_)) {
@@ -412,6 +437,7 @@ pub fn leave(app: App) {
     // Leave the screen first, so the Hanabi board is gone before its state is.
     app.screen.set(Screen::Menu);
     app.hanabi.reset();
+    app.wonderful.reset();
 }
 
 #[cfg(test)]

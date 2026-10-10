@@ -1,0 +1,11 @@
+[package]
+name = "wonderful-core"
+version = "0.1.0"
+edition = "2021"
+description = "Rules engine for a draft-and-build engine game in the style of It's a Wonderful World (original card set)"
+
+[dependencies]
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

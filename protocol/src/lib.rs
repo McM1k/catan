@@ -13,15 +13,18 @@ use serde::{Deserialize, Serialize};
 pub enum GameKind {
     Colonists,
     Hanabi,
+    /// A draft-and-build card game (original card set; see `wonderful-core`).
+    Wonderful,
 }
 
 impl GameKind {
-    pub const ALL: [GameKind; 2] = [GameKind::Colonists, GameKind::Hanabi];
+    pub const ALL: [GameKind; 3] = [GameKind::Colonists, GameKind::Hanabi, GameKind::Wonderful];
 
     pub fn title(self) -> &'static str {
         match self {
             GameKind::Colonists => "Colonists",
             GameKind::Hanabi => "Hanabi",
+            GameKind::Wonderful => "It's a Wonderful World",
         }
     }
 
@@ -33,6 +36,7 @@ impl GameKind {
         match self {
             GameKind::Colonists => 4,
             GameKind::Hanabi => 5,
+            GameKind::Wonderful => 5,
         }
     }
 }
@@ -60,6 +64,9 @@ pub enum ClientMsg {
     Colonists(engine::Action),
     /// A Hanabi move.
     Hanabi(hanabi_core::Action),
+    /// A Wonderful World move. Every player moves at the same time, so the
+    /// server only checks the move against the rules, never against a turn.
+    Wonderful(wonderful_core::Action),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -94,6 +101,13 @@ pub enum ServerMsg {
         names: Vec<String>,
         connected: Vec<bool>,
     },
+    /// A running Wonderful World game, personalised for the receiving seat.
+    /// `names` and `connected` are indexed by seat.
+    WonderfulState {
+        view: Box<wonderful_core::View>,
+        names: Vec<String>,
+        connected: Vec<bool>,
+    },
     Error(String),
 }
 
@@ -107,6 +121,8 @@ mod tests {
     fn game_limits() {
         assert_eq!(GameKind::Colonists.max_players(), 4);
         assert_eq!(GameKind::Hanabi.max_players(), 5);
+        assert_eq!(GameKind::Wonderful.max_players(), 5);
+        assert_eq!(GameKind::ALL.len(), 3);
         for g in GameKind::ALL {
             assert_eq!(g.min_players(), 2);
             assert!(!g.title().is_empty());
@@ -127,6 +143,17 @@ mod tests {
                 target: PlayerId(1),
                 clue: hanabi_core::Clue::Color(hanabi_core::Color::Red),
             }),
+            ClientMsg::Create { game: GameKind::Wonderful, name: "Cy".into() },
+            ClientMsg::Wonderful(wonderful_core::Action::Draft { card: wonderful_core::CardId(7) }),
+            ClientMsg::Wonderful(wonderful_core::Action::Recycle {
+                card: wonderful_core::CardId(8),
+                to: wonderful_core::Target::Empire,
+            }),
+            ClientMsg::Wonderful(wonderful_core::Action::Place {
+                piece: wonderful_core::Piece::Krystallium(wonderful_core::Res::Gold),
+                target: wonderful_core::Target::Card(wonderful_core::CardId(9)),
+            }),
+            ClientMsg::Wonderful(wonderful_core::Action::Ready),
         ];
         for m in msgs {
             let json = serde_json::to_string(&m).unwrap();
@@ -177,6 +204,30 @@ mod tests {
         // Your own hand is redacted on the wire.
         assert!(view.hands[&PlayerId(1)].iter().all(|c| c.card.is_none()));
         assert!(view.hands[&PlayerId(0)].iter().all(|c| c.card.is_some()));
+    }
+
+    /// The Wonderful World view has no maps, and hides other players' drafts.
+    #[test]
+    fn wonderful_state_survives_json() {
+        let mut game = wonderful_core::State::new(3, 5);
+        let card = game.players[1].hand[0];
+        game.apply(1, wonderful_core::Action::Draft { card }).unwrap();
+        let msg = ServerMsg::WonderfulState {
+            view: Box::new(game.view_for(2)),
+            names: vec!["A".into(), "B".into(), "C".into()],
+            connected: vec![true, false, true],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let ServerMsg::WonderfulState { view, names, connected } = serde_json::from_str(&json).unwrap() else {
+            panic!("wrong variant: {json}");
+        };
+        assert_eq!(*view, game.view_for(2));
+        assert_eq!(view.you, 2);
+        assert_eq!(view.hand.len(), 7);
+        // Seat 1 has picked, but nobody else can tell which card.
+        assert!(view.players[1].picked && view.picked.is_none());
+        assert_eq!(names.len(), 3);
+        assert_eq!(connected, vec![true, false, true]);
     }
 
     #[test]

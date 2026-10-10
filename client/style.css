@@ -135,7 +135,7 @@ html, body { margin: 0; background: var(--bg); }
   font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .menu-page h1, .menu-page h2 { margin: 0 0 .5rem; }
 .menu-page .muted { color: var(--muted); }
-.menu-page .menu { max-width: 760px; margin: 7vh auto; padding: 0 1rem; text-align: center; }
+.menu-page .menu { max-width: 1000px; margin: 7vh auto; padding: 0 1rem; text-align: center; }
 .menu-page .menu h1 { font-size: 2.2rem; }
 .menu-page .game-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1.6rem; }
 .menu-page .game-card { display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: 1.4rem 1.2rem;

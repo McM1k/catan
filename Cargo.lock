@@ -212,6 +212,7 @@ dependencies = [
  "serde_json",
  "wasm-bindgen",
  "web-sys",
+ "wonderful-core",
 ]
 
 [[package]]
@@ -1306,6 +1307,7 @@ dependencies = [
  "rand 0.8.8",
  "serde",
  "serde_json",
+ "wonderful-core",
 ]
 
 [[package]]
@@ -1671,6 +1673,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower-http",
+ "wonderful-core",
 ]
 
 [[package]]
@@ -2361,6 +2364,14 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "wonderful-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "writeable"

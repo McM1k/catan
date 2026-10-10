@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 engine = { path = "../engine" }
 hanabi-core = { path = "../hanabi-core" }
+wonderful-core = { path = "../wonderful-core" }
 serde = { workspace = true }
 
 [dev-dependencies]

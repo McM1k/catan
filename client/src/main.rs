@@ -8,6 +8,7 @@ mod hanabi;
 mod home;
 mod menu;
 mod state;
+mod wonderful;
 
 use leptos::prelude::*;
 use protocol::GameKind;
@@ -24,12 +25,19 @@ fn hanabi_page(app: App, content: impl IntoView + 'static) -> AnyView {
     hanabi::screens::shell(app, content.into_any()).into_any()
 }
 
+/// An It's a Wonderful World screen: the same, under `.wonderful` (see
+/// `wonderful::screens::shell`).
+fn wonderful_page(content: impl IntoView + 'static) -> AnyView {
+    wonderful::screens::shell(content.into_any()).into_any()
+}
+
 /// Whatever the current screen says should be shown.
 fn current_screen(app: App) -> AnyView {
     match app.screen.get() {
         Screen::Menu => menu::menu_screen(app).into_any(),
         Screen::Home(GameKind::Colonists) => colonists(home::home_screen(app)),
         Screen::Home(GameKind::Hanabi) => hanabi_page(app, hanabi::screens::home_screen(app)),
+        Screen::Home(GameKind::Wonderful) => wonderful_page(wonderful::screens::home_screen(app)),
         Screen::Lobby {
             room,
             game: GameKind::Colonists,
@@ -44,8 +52,18 @@ fn current_screen(app: App) -> AnyView {
             you,
             is_host,
         } => hanabi_page(app, hanabi::screens::lobby_screen(app, room, players, you, is_host)),
+        Screen::Lobby {
+            room,
+            game: GameKind::Wonderful,
+            players,
+            you,
+            is_host,
+        } => wonderful_page(wonderful::screens::lobby_screen(app, room, players, you, is_host)),
         Screen::Game { view, connected, room } => colonists(game::game_screen(app, *view, connected, room)),
         Screen::HanabiGame => hanabi_page(app, hanabi::board::board(app)),
+        Screen::WonderfulGame { view, names, connected, room } => {
+            wonderful_page(wonderful::board::board(app, *view, names, connected, room))
+        }
     }
 }
 
@@ -56,11 +74,13 @@ fn page_title(app: App) -> &'static str {
         Screen::Home(game) | Screen::Lobby { game, .. } => Some(*game),
         Screen::Game { .. } => Some(GameKind::Colonists),
         Screen::HanabiGame => Some(GameKind::Hanabi),
+        Screen::WonderfulGame { .. } => Some(GameKind::Wonderful),
     });
     match game {
         None => "Games",
         Some(GameKind::Colonists) => "Colonists",
         Some(GameKind::Hanabi) => hanabi::screens::tab_title(app),
+        Some(GameKind::Wonderful) => wonderful::screens::TAB_TITLE,
     }
 }
 
@@ -219,8 +239,13 @@ mod render_tests {
             .collect()
     }
 
+    /// Whether `html` shows `text`, however the renderer escaped its quotes.
+    fn shows(html: &str, text: &str) -> bool {
+        html.contains(text) || html.contains(&text.replace('\'', "&#39;"))
+    }
+
     #[test]
-    fn menu_lists_both_games_and_leads_to_their_rooms() {
+    fn menu_lists_every_game_and_leads_to_their_rooms() {
         let owner = Owner::new();
         owner.with(|| {
             let app = App::new();
@@ -228,23 +253,34 @@ mod render_tests {
             let html = current_screen(app).to_html();
             assert!(html.contains("Pick a game") && html.contains("menu-page"));
             assert!(html.contains("Colonists") && html.contains("Hanabi"));
-            assert!(html.contains("2\u{2013}4 players") && html.contains("2\u{2013}5 players"));
-            // Both games are playable here: no greyed-out card, no outside link.
+            assert!(shows(&html, "It's a Wonderful World"));
+            // Colonists seats 2-4; Hanabi and It's a Wonderful World seat 2-5.
+            assert_eq!(html.matches("2\u{2013}4 players").count(), 1);
+            assert_eq!(html.matches("2\u{2013}5 players").count(), 2);
+            // Every game is playable here: no greyed-out card, no outside link.
             assert!(!html.contains("disabled") && !html.contains("href="));
             assert_eq!(page_title(app), "Games");
 
             app.screen.set(Screen::Home(GameKind::Colonists));
             let html = current_screen(app).to_html();
             assert!(html.contains("theme-colonists") && html.contains("Create a room"));
-            assert!(!html.contains("class=\"hanabi\""));
+            assert!(!html.contains("class=\"hanabi\"") && !html.contains("class=\"wonderful\""));
             assert_eq!(page_title(app), "Colonists");
 
             app.screen.set(Screen::Home(GameKind::Hanabi));
             let html = current_screen(app).to_html();
             assert!(html.contains("class=\"hanabi\"") && html.contains("Create a room"));
             assert!(html.contains("Join room") && html.contains("All games"));
-            assert!(!html.contains("theme-colonists"));
+            assert!(!html.contains("theme-colonists") && !html.contains("class=\"wonderful\""));
             assert_eq!(page_title(app), "Hanabi");
+
+            app.screen.set(Screen::Home(GameKind::Wonderful));
+            let html = current_screen(app).to_html();
+            assert!(html.contains("class=\"wonderful\"") && html.contains("Create a room"));
+            assert!(html.contains("Join room") && html.contains("All games"));
+            assert!(shows(&html, "It's a Wonderful World"));
+            assert!(!html.contains("theme-colonists") && !html.contains("class=\"hanabi\""));
+            assert_eq!(page_title(app), "It's a Wonderful World");
         });
     }
 
@@ -274,6 +310,15 @@ mod render_tests {
             let html = current_screen(app).to_html();
             assert!(html.contains("WXYZ") && html.contains("Waiting for the host to start"));
             assert!(!html.contains("Hanabii mode"));
+
+            // ...or to It's a Wonderful World, which has no rules to pick.
+            app.screen.set(lobby(GameKind::Wonderful));
+            let html = current_screen(app).to_html();
+            assert!(html.contains("WXYZ") && html.contains("Waiting for the host to start"));
+            assert!(html.contains("class=\"wonderful\"") && html.contains("(you)"));
+            assert!(!html.contains("Hanabii mode") && !html.contains("theme-colonists"));
+            assert!(!html.contains("Start game"));
+            assert_eq!(page_title(app), "It's a Wonderful World");
         });
     }
 
@@ -330,6 +375,58 @@ mod render_tests {
             seats[1].connected = false;
             let html = hanabi::screens::lobby_screen(app, "WXYZ".into(), seats, 0, true).to_html();
             assert!(html.contains("offline"));
+        });
+    }
+
+    #[test]
+    fn wonderful_lobby_lets_only_the_host_start() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let app = App::new();
+            let seats = players(&["Ann", "Bob", "Cy"]);
+            let host = wonderful::screens::lobby_screen(app, "WXYZ".into(), seats.clone(), 0, true).to_html();
+            assert!(host.contains("WXYZ") && host.contains("Start game"));
+            assert!(host.contains("Ann") && host.contains("(you)") && host.contains("host"));
+            assert!(host.contains("Leave room"));
+            // With three players the start button is enabled.
+            assert!(shows(&host, "Everyone who's here is in"));
+            assert!(!host.contains("Needs at least 2 players") && !host.contains("disabled"));
+
+            // Alone, the host can't start yet.
+            let alone = wonderful::screens::lobby_screen(app, "WXYZ".into(), players(&["Ann"]), 0, true).to_html();
+            assert!(alone.contains("Needs at least 2 players") && alone.contains("disabled"));
+
+            // A guest waits for the host.
+            let guest = wonderful::screens::lobby_screen(app, "WXYZ".into(), seats, 2, false).to_html();
+            assert!(guest.contains("Cy") && guest.contains("(you)"));
+            assert!(guest.contains("Waiting for the host to start the game"));
+            assert!(!guest.contains("Start game"));
+
+            // A seat whose connection dropped says so.
+            let mut seats = players(&["Ann", "Bob"]);
+            seats[1].connected = false;
+            let html = wonderful::screens::lobby_screen(app, "WXYZ".into(), seats, 0, true).to_html();
+            assert!(html.contains("offline"));
+        });
+    }
+
+    #[test]
+    fn a_wonderful_game_is_drawn_in_its_own_frame_and_titles_the_page() {
+        let owner = Owner::new();
+        owner.with(|| {
+            let app = App::new();
+            let state = wonderful_core::State::new(3, 7);
+            app.screen.set(Screen::WonderfulGame {
+                view: Box::new(state.view_for(1)),
+                names: vec!["Ann".into(), "Bob".into(), "Cy".into()],
+                connected: vec![true; 3],
+                room: "WXYZ".into(),
+            });
+            let html = current_screen(app).to_html();
+            assert!(html.contains("class=\"wonderful\"") && html.contains("WXYZ"));
+            assert!(html.contains("Draft") && html.contains("Leave game"));
+            assert!(!html.contains("theme-colonists") && !html.contains("class=\"hanabi\""));
+            assert_eq!(page_title(app), "It's a Wonderful World");
         });
     }
 
