@@ -3,8 +3,7 @@
 Three multiplayer, browser-based games in Rust, served by one server and played from
 one page: Catan, the Hanabi clone from
 [McM1k/hanabii](https://github.com/McM1k/hanabii) (merged from commit `c2d5fa6`), and a
-card-drafting empire builder ("It's a Wonderful World", with an original placeholder card
-set, see below).
+card-drafting empire builder ("It's a Wonderful World", base game).
 All use the same rooms: one player creates a room and gets a 4-letter code, the
 others join with it, the host starts the game.
 
@@ -99,14 +98,13 @@ cargo test --workspace
   longest road (incl. cut roads), largest army, dev cards, winning, hidden info.
 * `hanabi-core` (133): the original rules tests, unchanged apart from one assertion
   rewritten the way clippy prefers.
-* `wonderful-core` (55, plus one ignored): the shape of the card table, the draft (hand
+* `wonderful-core` (56, plus one ignored): the base-game card table, the draft (hand
   sizes, which way the hands go in each round, secret picks, the discards with two
   players), planning (build, recycle, scrap, cubes that must fit where they go),
   production (the races and their ties, the characters, the Science choice, Krystallium,
   cubes that are lost, the wrap-up step), scoring and the tie-breaks, what a view hides,
   JSON round trips, and whole games from a seed for 2 to 5 players. The ignored
-  `economy_report` prints how a simple bot fares with the cards (see "The cards are a
-  placeholder set" below).
+  `economy_report` prints how a simple bot fares with the cards (see "The cards" below).
 * `protocol` (7): every message survives JSON, including the Hanabi and Wonderful views
   (the Hanabi maps are keyed by seat and color), and rule payloads from before "hanabii"
   existed still parse.
@@ -230,40 +228,41 @@ slowest player. Each round has three phases.
 2. **Planning.** Every card you kept is either **built** (it goes under construction) or
    **recycled** for the cube it gives, which goes on a building that still needs that
    resource or on your Empire. A building under construction can be **scrapped**: what was
-   placed on it is lost, and you get its recycling cube.
+   placed on it is lost, and its recycling cube goes on your Empire.
 3. **Production**, one resource after the other: Materials, Energy, Science, Gold, Exploration.
    Your Empire and your finished cards make cubes of that resource; you place them on
    buildings or on the Empire, and **cubes you don't place are lost**. Whoever makes strictly
-   the most of a resource takes a character: a General for Materials or Energy, a Financier for
-   Gold or Exploration, and for Science the winner chooses. A tie gives nothing. Characters
+   the most of a resource takes a character: a Financier for Materials or Gold, a General for
+   Energy or Exploration, and for Science the winner chooses. A tie gives nothing. Characters
    fill the character spaces of buildings. Five cubes on the Empire make a Krystallium, a
-   wildcard cube that stands in for any resource (not for a character). A last "wrap-up" step
-   is there to place Krystallium and characters; it is skipped when nobody can.
+   wildcard cube that stands in for any resource (not for a character), and the only thing
+   that fills a card's Krystallium spaces. A last "wrap-up" step is there to place Krystallium
+   and characters; it is skipped when nobody can.
 
 A building with every space filled is finished: from then on it produces every round, and some
-cards hand over a one-off bonus (a cube, a Krystallium or a character). After round 4 you score
-the printed points of your finished cards, the points that depend on the cards of a type or the
-characters you hold, and 1 for each General and each Financier. Ties go to whoever finished most
-cards, then to whoever holds most characters, and are shared beyond that.
+cards hand over a one-off bonus (Krystallium or characters, kept until used). After round 4 you
+score the printed points of your finished cards, the points that depend on the cards of a type
+or the characters you hold (on your cards and on your Empire), and 1 for each General and each
+Financier. Ties go to whoever finished most cards, then to whoever holds most characters, and
+are shared beyond that.
 
-### The cards are a placeholder set
+### The cards
 
-The published game has 150 cards, and their text wasn't available while this was built, so
-**the catalogue here is an original placeholder set**: 75 designs × 2 copies = 150 cards that
-have the shape of the real ones (five types, costs in cubes and characters, production,
-a recycling cube, one-off bonuses, points that depend on types or characters) but none of the
-numbers, names or art are the real cards'. The five Empires are placeholders too. How the set
-plays has only been checked with simple bots (`cargo test -p wonderful-core economy_report --
---ignored --nocapture`), not with people.
+The catalogue is the published base game: 78 designs, 150 cards (many designs come in several
+copies), and the five Empires on their side A (Noram States, Republic of Europe, Federation of
+Asia, Panafrican Union, Aztec Empire), which each produce a few cubes and score a bonus. The
+numbers come from Game Park's online version of the game
+([gamepark/its-a-wonderful-world](https://github.com/gamepark/its-a-wonderful-world)). Seats are
+shuffled when the game starts and seat *i* plays Empire *i*.
 
-The whole catalogue is one table, `designs()` in `wonderful-core/src/cards.rs`; to play with
-other cards, replace its rows (and keep `DESIGNS` and `COPIES` in step), and the `EMPIRES`
-table below it. Nothing else has to change.
+The whole catalogue is one table, `designs()` in `wonderful-core/src/cards.rs`, with each
+design's number of copies, and the `EMPIRES` table below it. `cargo test -p wonderful-core
+economy_report -- --ignored --nocapture` prints how two simple bots fare with it.
 
 ### What isn't in it
 
-Only the base game: there is no Corruption & Ascension option in the lobby (it is dropped
-until its rules and cards are available), no solo play, and no turn timer.
+Only the base game on side A of the Empires: no side B (the same Empire for everybody), no
+Corruption & Ascension or War or Peace option in the lobby, no solo play, and no turn timer.
 
 ### Where it lives
 
@@ -285,5 +284,5 @@ sends every seat its own view after every move.
 * No chat, spectators or turn timers; a finished game ends the room's play (leave and
   create a new room for another round).
 * Catan always uses the random standard layout.
-* It's a Wonderful World uses a placeholder card set and has no Corruption & Ascension
-  option (see its section above).
+* It's a Wonderful World is the base game only, on side A of the Empires (see its section
+  above).

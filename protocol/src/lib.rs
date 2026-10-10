@@ -150,7 +150,7 @@ mod tests {
                 to: wonderful_core::Target::Empire,
             }),
             ClientMsg::Wonderful(wonderful_core::Action::Place {
-                piece: wonderful_core::Piece::Krystallium(wonderful_core::Res::Gold),
+                piece: wonderful_core::Piece::Krystallium(Some(wonderful_core::Res::Gold)),
                 target: wonderful_core::Target::Card(wonderful_core::CardId(9)),
             }),
             ClientMsg::Wonderful(wonderful_core::Action::Ready),

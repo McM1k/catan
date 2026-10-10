@@ -8,9 +8,12 @@ fn id(name: &str) -> CardId {
     CardId(at as u16)
 }
 
-/// The second copy of the design called `name`.
+/// Another copy of the design called `name` (it must have more than one).
 fn twin(name: &str) -> CardId {
-    CardId(id(name).0 + DESIGNS as u16)
+    (DESIGNS as u16..DECK_SIZE as u16)
+        .map(CardId)
+        .find(|c| c.def().name == name)
+        .unwrap_or_else(|| panic!("{name} has a single copy"))
 }
 
 /// A game in which everybody has drafted their first card each time.
@@ -98,23 +101,32 @@ fn check_cards(s: &State) {
 // ----- the catalogue -----------------------------------------------------
 
 #[test]
-fn the_catalogue_has_the_expected_shape() {
+fn the_catalogue_is_the_base_game() {
     let all = catalogue();
     assert_eq!(all.len(), DESIGNS);
     assert_eq!(DECK_SIZE, 150);
-    for kind in Kind::ALL {
-        let of_kind = all.iter().filter(|c| c.kind == kind).count();
-        assert_eq!(of_kind, DESIGNS / 5, "{kind:?}");
-    }
+    // Designs and cards of each type, Structures to Discoveries.
+    let designs = Kind::ALL.map(|k| all.iter().filter(|c| c.kind == k).count());
+    let cards = Kind::ALL.map(|k| all.iter().filter(|c| c.kind == k).map(|c| c.copies as usize).sum::<usize>());
+    assert_eq!(designs, [9, 9, 23, 20, 17]);
+    assert_eq!(cards, [50, 31, 23, 29, 17]);
     let mut names: Vec<_> = all.iter().map(|c| c.name).collect();
     names.sort();
     names.dedup();
     assert_eq!(names.len(), DESIGNS, "names must be unique");
     for c in all {
         let total = c.cost.total();
-        assert!((1..=20).contains(&total), "{} costs {total}", c.name);
-        assert!(c.vp <= 12, "{}", c.name);
+        assert!((2..=8).contains(&total), "{} costs {total}", c.name);
+        assert!(c.vp <= 15, "{}", c.name);
+        assert!(c.vp == 0 || (c.combo.is_none() && c.per_token.is_none()), "{} scores two ways", c.name);
     }
+    // A few cards checked against the printed ones.
+    let time_travel = id("Time Travel").def();
+    assert_eq!(time_travel.cost, Cost { res: [0, 0, 5, 0, 0], krystallium: 3, ..Cost::default() });
+    assert_eq!((time_travel.vp, time_travel.recycle), (15, Res::Exploration));
+    let zeppelin = id("Zeppelin").def();
+    assert_eq!((zeppelin.kind, zeppelin.cost.res, zeppelin.produces), (Kind::Vehicle, [0, 2, 0, 0, 0], [0, 0, 0, 0, 1]));
+    assert_eq!(id("Fountain of Youth").def().bonus, &[Bonus::Krystallium; 3]);
 }
 
 #[test]
@@ -127,39 +139,44 @@ fn every_resource_and_every_character_can_be_had() {
     }
     assert!(all.iter().any(|c| c.cost.generals > 0));
     assert!(all.iter().any(|c| c.cost.financiers > 0));
-    assert!(all.iter().any(|c| c.bonus == Some(Bonus::Krystallium)));
-    assert!(all.iter().any(|c| c.bonus == Some(Bonus::Token(Token::General))));
-    assert!(all.iter().any(|c| c.bonus == Some(Bonus::Token(Token::Financier))));
-    assert!(all.iter().any(|c| matches!(c.bonus, Some(Bonus::Cube(_)))));
+    assert!(all.iter().any(|c| c.cost.krystallium > 0));
+    for bonus in [Bonus::Krystallium, Bonus::Token(Token::General), Bonus::Token(Token::Financier)] {
+        assert!(all.iter().any(|c| c.bonus.contains(&bonus)), "nobody gives {bonus:?}");
+    }
 }
 
 #[test]
-fn copies_share_a_design() {
-    assert_eq!(CardId(0).def().name, CardId(DESIGNS as u16).def().name);
-    assert_eq!(id("Quarry").def().name, "Quarry");
-    assert_eq!(twin("Quarry").def().name, "Quarry");
-    assert_ne!(id("Quarry"), twin("Quarry"));
-    // The last card of the deck is a real design too.
-    assert!(!CardId(DECK_SIZE as u16 - 1).def().name.is_empty());
+fn every_design_has_its_copies_in_the_deck() {
+    // One of each design first, in catalogue order...
+    for (i, card) in catalogue().iter().enumerate() {
+        assert_eq!(CardId(i as u16).def(), card);
+    }
+    // ...then the extra copies.
+    for card in catalogue() {
+        let n = (0..DECK_SIZE as u16).filter(|&i| CardId(i).def().name == card.name).count();
+        assert_eq!(n, card.copies as usize, "{}", card.name);
+    }
+    assert_eq!(twin("Recycling Plant").def().name, "Recycling Plant");
+    assert_ne!(id("Recycling Plant"), twin("Recycling Plant"));
 }
 
 #[test]
 fn cost_arithmetic() {
-    let cost = Cost { res: [3, 0, 1, 0, 0], generals: 1, financiers: 0 };
-    assert_eq!(cost.total(), 5);
-    let half = Cost { res: [1, 5, 1, 0, 0], generals: 0, financiers: 3 };
+    let cost = Cost { res: [3, 0, 1, 0, 0], krystallium: 1, generals: 1, financiers: 0 };
+    assert_eq!(cost.total(), 6);
+    let half = Cost { res: [1, 5, 1, 0, 0], krystallium: 0, generals: 0, financiers: 3 };
     let left = cost.minus(&half);
-    assert_eq!(left, Cost { res: [2, 0, 0, 0, 0], generals: 1, financiers: 0 });
+    assert_eq!(left, Cost { res: [2, 0, 0, 0, 0], krystallium: 1, generals: 1, financiers: 0 });
     assert!(!left.is_zero());
     assert!(cost.minus(&cost).is_zero());
 }
 
 #[test]
 fn supremacy_characters() {
-    assert_eq!(Res::Materials.supremacy_token(), Some(Token::General));
+    assert_eq!(Res::Materials.supremacy_token(), Some(Token::Financier));
     assert_eq!(Res::Energy.supremacy_token(), Some(Token::General));
     assert_eq!(Res::Gold.supremacy_token(), Some(Token::Financier));
-    assert_eq!(Res::Exploration.supremacy_token(), Some(Token::Financier));
+    assert_eq!(Res::Exploration.supremacy_token(), Some(Token::General));
     assert_eq!(Res::Science.supremacy_token(), None);
 }
 
@@ -275,7 +292,7 @@ fn only_draft_moves_work_during_the_draft() {
         Err(Error::WrongPhase)
     );
     assert_eq!(s.apply(0, Action::Choose { token: Token::General }), Err(Error::WrongPhase));
-    assert_eq!(s.apply(0, Action::Scrap { card, to: Target::Empire }), Err(Error::WrongPhase));
+    assert_eq!(s.apply(0, Action::Scrap { card }), Err(Error::WrongPhase));
 }
 
 #[test]
@@ -299,7 +316,7 @@ fn with_two_players_the_leftovers_are_discarded() {
         assert!(p.hand.is_empty());
     }
     assert_eq!(s.discard.len(), 6, "3 cards each");
-    assert!(s.players.iter().all(|p| p.pending == [0; 5] && p.empire_cubes == 0), "no recycling bonus");
+    assert!(s.players.iter().all(|p| p.empire_cubes == 0), "no recycling bonus");
     check_cards(&s);
 }
 
@@ -332,19 +349,19 @@ fn recycling_gives_its_cube_to_the_empire() {
 #[test]
 fn a_recycled_cube_must_fit_where_it_goes() {
     let mut s = blank(2);
-    s.players[0].drafted = vec![id("Quarry"), id("Wind Farm"), id("Caravan")];
-    s.apply(0, Action::Build { card: id("Quarry") }).unwrap();
+    s.players[0].drafted = vec![id("Recycling Plant"), id("Wind Turbines"), id("Zeppelin")];
+    s.apply(0, Action::Build { card: id("Recycling Plant") }).unwrap();
     let discarded = s.discard.len(); // the two-player draft already discarded some
-    // Wind Farm recycles into Energy; the Quarry only has spaces for Materials.
-    let to = Target::Card(id("Quarry"));
-    assert_eq!(s.apply(0, Action::Recycle { card: id("Wind Farm"), to }), Err(Error::InvalidTarget));
+    // Wind Turbines recycle into Energy; the Recycling Plant only has spaces for Materials.
+    let to = Target::Card(id("Recycling Plant"));
+    assert_eq!(s.apply(0, Action::Recycle { card: id("Wind Turbines"), to }), Err(Error::InvalidTarget));
     // Nothing happened: the card is still there and not discarded.
-    assert!(s.players[0].drafted.contains(&id("Wind Farm")));
+    assert!(s.players[0].drafted.contains(&id("Wind Turbines")));
     assert_eq!(s.discard.len(), discarded);
     // A building you don't have is no target either.
-    let nowhere = Target::Card(id("Smelter"));
-    assert_eq!(s.apply(0, Action::Recycle { card: id("Wind Farm"), to: nowhere }), Err(Error::InvalidTarget));
-    assert_eq!(s.apply(0, Action::Recycle { card: id("Wind Farm"), to: Target::Empire }), Ok(()));
+    let nowhere = Target::Card(id("Nuclear Plant"));
+    assert_eq!(s.apply(0, Action::Recycle { card: id("Wind Turbines"), to: nowhere }), Err(Error::InvalidTarget));
+    assert_eq!(s.apply(0, Action::Recycle { card: id("Wind Turbines"), to: Target::Empire }), Ok(()));
     assert_eq!(s.discard.len(), discarded + 1);
 }
 
@@ -352,16 +369,16 @@ fn a_recycled_cube_must_fit_where_it_goes() {
 fn recycling_can_finish_a_building_at_once() {
     let mut s = blank(2);
     s.players[0].buildings = vec![Building {
-        card: id("Hover Cart"),
+        card: id("Wind Turbines"),
         filled: Cost { res: [1, 0, 0, 0, 0], ..Cost::default() },
     }];
-    s.players[0].drafted = vec![id("Wind Farm")]; // recycles into Energy
-    s.apply(0, Action::Recycle { card: id("Wind Farm"), to: Target::Card(id("Hover Cart")) }).unwrap();
+    s.players[0].drafted = vec![id("Recycling Plant")]; // recycles into Materials
+    s.apply(0, Action::Recycle { card: id("Recycling Plant"), to: Target::Card(id("Wind Turbines")) }).unwrap();
     assert!(s.players[0].buildings.is_empty());
-    assert_eq!(s.players[0].empire, vec![id("Hover Cart")]);
-    assert!(s.log.contains(&Event::Completed { seat: 0, card: id("Hover Cart") }));
-    // It produces from now on: the Empire's Energy icon plus the cart's.
-    assert_eq!(s.production(0, Res::Energy), 2);
+    assert_eq!(s.players[0].empire, vec![id("Wind Turbines")]);
+    assert!(s.log.contains(&Event::Completed { seat: 0, card: id("Wind Turbines") }));
+    // It produces from now on (Noram States has no Energy icon of its own).
+    assert_eq!(s.production(0, Res::Energy), 1);
 }
 
 #[test]
@@ -376,48 +393,44 @@ fn finishing_a_building_pays_its_bonus() {
     };
     let mut s = blank(2);
     s.players[0].buildings = vec![
-        almost("Crystal Cave", Res::Exploration.index()), // Krystallium
-        almost("Bazaar", Res::Gold.index()),              // a Financier
-        almost("Founding Charter", Res::Gold.index()),    // a General
-        almost("Meteor Mine", Res::Exploration.index()),  // a Materials cube
+        almost("Transmutation", Res::Gold.index()),           // a Krystallium
+        almost("Industrial Complex", Res::Materials.index()), // a Financier
+        almost("Military Base", Res::Materials.index()),      // a General
+        almost("Genetic Upgrades", Res::Science.index()),     // two Financiers
     ];
-    s.players[0].drafted = vec![id("Skiff"), twin("Skiff"), id("Caravan"), twin("Caravan")]; // X, X, G, G
+    // Recycling into Gold, Materials, Materials and Science.
+    s.players[0].drafted =
+        vec![id("Financial Center"), id("Recycling Plant"), twin("Recycling Plant"), id("Research Center")];
     let finish = |s: &mut State, card: CardId, to: &str| {
         s.apply(0, Action::Recycle { card, to: Target::Card(id(to)) }).unwrap();
     };
-    finish(&mut s, id("Skiff"), "Crystal Cave");
+    finish(&mut s, id("Financial Center"), "Transmutation");
     assert_eq!(s.players[0].krystallium, 1);
-    finish(&mut s, id("Caravan"), "Bazaar");
+    finish(&mut s, id("Recycling Plant"), "Industrial Complex");
     assert_eq!(s.players[0].financiers, 1);
-    finish(&mut s, twin("Caravan"), "Founding Charter");
+    finish(&mut s, twin("Recycling Plant"), "Military Base");
     assert_eq!(s.players[0].generals, 1);
-    finish(&mut s, twin("Skiff"), "Meteor Mine");
-    assert_eq!(s.players[0].pending, [1, 0, 0, 0, 0]);
+    finish(&mut s, id("Research Center"), "Genetic Upgrades");
+    assert_eq!(s.players[0].financiers, 3);
     assert_eq!(s.players[0].empire.len(), 4);
 }
 
 #[test]
-fn scrapping_loses_what_was_placed_but_pays_the_recycling_cube() {
+fn scrapping_loses_what_was_placed_and_sends_the_recycling_cube_to_the_empire() {
     let mut s = blank(2);
+    let placed = Cost { res: [3, 1, 0, 0, 0], krystallium: 1, ..Cost::default() };
     s.players[0].buildings = vec![
-        Building { card: id("Smelter"), filled: Cost { res: [2, 1, 0, 0, 0], ..Cost::default() } },
-        Building { card: id("Quarry"), filled: Cost::default() },
+        Building { card: id("Juggernaut"), filled: placed },
+        Building { card: id("Recycling Plant"), filled: Cost::default() },
     ];
-    // Into itself is no good; into the other building is fine (Smelter
-    // recycles into Energy, which the Quarry has no space for).
-    assert_eq!(
-        s.apply(0, Action::Scrap { card: id("Smelter"), to: Target::Card(id("Smelter")) }),
-        Err(Error::InvalidTarget)
-    );
-    assert_eq!(
-        s.apply(0, Action::Scrap { card: id("Smelter"), to: Target::Card(id("Quarry")) }),
-        Err(Error::InvalidTarget)
-    );
-    s.apply(0, Action::Scrap { card: id("Smelter"), to: Target::Empire }).unwrap();
+    s.players[0].empire_cubes = 4;
+    s.apply(0, Action::Scrap { card: id("Juggernaut") }).unwrap();
     assert_eq!(s.players[0].buildings.len(), 1);
-    assert_eq!(s.players[0].empire_cubes, 1);
-    assert_eq!(s.discard.last(), Some(&id("Smelter")));
-    assert_eq!(s.apply(0, Action::Scrap { card: id("Smelter"), to: Target::Empire }), Err(Error::NotUnderConstruction));
+    assert_eq!(s.discard.last(), Some(&id("Juggernaut")));
+    // Its cube made the fifth on the Empire; the Krystallium on it is gone.
+    assert_eq!((s.players[0].empire_cubes, s.players[0].krystallium), (0, 1));
+    assert_eq!(s.apply(0, Action::Scrap { card: id("Juggernaut") }), Err(Error::NotUnderConstruction));
+    assert_eq!(s.apply(0, Action::Scrap { card: id("Zeppelin") }), Err(Error::NotUnderConstruction));
 }
 
 #[test]
@@ -443,69 +456,81 @@ fn planning_ends_when_everyone_has_decided_everything() {
 #[test]
 fn production_adds_the_empire_cards_and_scaling_icons() {
     let mut s = blank(2);
-    // Aurelian Union starts with 1 Materials and 1 Gold.
-    assert_eq!(s.production(0, Res::Materials), 1);
-    assert_eq!(s.production(0, Res::Gold), 1);
-    assert_eq!(s.production(1, Res::Energy), 1);
-    // Quarry 1 + Smelter 2 + Mega Foundry (1 per Structure: all three are).
-    s.players[0].empire = vec![id("Quarry"), id("Smelter"), id("Mega Foundry")];
-    assert_eq!(s.production(0, Res::Materials), 1 + 1 + 2 + 3);
-    // Skiff 1 + Tram Network (1 per Vehicle: both are).
-    s.players[0].empire.extend([id("Skiff"), id("Tram Network")]);
-    assert_eq!(s.production(0, Res::Exploration), 1 + 2);
-    // Cards of other types don't count for the scaling.
-    s.players[0].empire.push(id("Quarry"));
-    assert_eq!(s.production(0, Res::Materials), 1 + 1 + 1 + 2 + 4);
+    // Noram States starts with 3 Materials and 1 Gold, the Republic of
+    // Europe with 2 Materials, 1 Energy and 1 Science.
+    assert_eq!(Res::ALL.map(|r| s.production(0, r)), [3, 0, 0, 1, 0]);
+    assert_eq!(Res::ALL.map(|r| s.production(1, r)), [2, 1, 1, 0, 0]);
+    // Recycling Plant 2 + Industrial Complex 1 + Robot Assistants (1 per
+    // Structure: the other two).
+    s.players[0].empire = vec![id("Recycling Plant"), id("Industrial Complex"), id("Robot Assistants")];
+    assert_eq!(s.production(0, Res::Materials), 3 + 2 + 1 + 2);
+    // Zeppelin 1 + Super-Sonar (1 per Vehicle: the Zeppelin, not itself).
+    s.players[0].empire.extend([id("Zeppelin"), id("Super-Sonar")]);
+    assert_eq!(s.production(0, Res::Exploration), 1 + 1);
+    // Another Structure: its own icons and one more for the Robot Assistants.
+    s.players[0].empire.push(twin("Recycling Plant"));
+    assert_eq!(s.production(0, Res::Materials), 3 + 2 + 1 + 2 + (2 + 1));
 }
 
 #[test]
 fn the_best_producer_takes_the_character() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Quarry")]; // 2 Materials against 0
     start_production(&mut s);
+    // Materials: Noram States makes 3, the Republic of Europe 2.
     assert_eq!(s.phase, Phase::Production { step: 0 });
-    assert_eq!(s.players[0].generals, 1);
+    assert_eq!((s.players[0].financiers, s.players[0].generals), (1, 0));
     assert_eq!(s.players[1].generals + s.players[1].financiers, 0);
-    assert_eq!((s.players[0].pool, s.players[0].produced), (2, 2));
-    assert!(!s.players[0].ready, "has cubes to place");
-    assert!(s.players[1].ready, "has nothing to do in this step");
+    assert_eq!((s.players[0].pool, s.players[0].produced), (3, 3));
+    assert_eq!((s.players[1].pool, s.players[1].produced), (2, 2));
+    assert!(!s.players[0].ready && !s.players[1].ready, "both have cubes to place");
     assert!(s.log.contains(&Event::Supremacy { res: Res::Materials, seat: Some(0) }));
+    skip_to(&mut s, 1);
+    // Energy: only the Republic of Europe makes any.
+    assert_eq!(s.players[1].generals, 1);
+    assert!(s.players[0].ready, "has nothing to do in this step");
 }
 
 #[test]
-fn gold_and_exploration_give_financiers() {
+fn each_resource_gives_its_own_character() {
     let mut s = blank(2);
-    s.players[1].empire = vec![id("Granary"), id("Lost Ruins")]; // Gold 1, Exploration 1
+    s.players[1].empire = vec![id("Blackbeard's Treasure")]; // Gold 1, Exploration 1
     start_production(&mut s);
-    skip_to(&mut s, 3); // Gold: seat 0 has 1 (Aurelian), seat 1 has 1 (Granary) -> tie
-    assert_eq!(s.players[0].financiers + s.players[1].financiers, 0);
+    assert_eq!(s.players[0].financiers, 1, "Materials: a Financier");
+    skip_to(&mut s, 2);
+    assert_eq!(s.players[1].generals, 1, "Energy: a General");
+    // Science: seat 1 chooses (and `skip_step` picks a General).
+    skip_to(&mut s, 3);
+    assert_eq!(s.players[1].generals, 2);
+    // Gold: 1 each, a tie.
     assert!(s.log.contains(&Event::Supremacy { res: Res::Gold, seat: None }));
-    skip_to(&mut s, 4); // Exploration: only seat 1 produces any
-    assert_eq!(s.players[1].financiers, 1);
+    assert_eq!(s.players[0].financiers + s.players[1].financiers, 1);
+    skip_to(&mut s, 4);
+    // Exploration: only seat 1 makes any.
+    assert_eq!(s.players[1].generals, 3, "Exploration: a General");
     assert!(s.log.contains(&Event::Supremacy { res: Res::Exploration, seat: Some(1) }));
 }
 
 #[test]
 fn a_tie_for_the_most_gives_nobody_a_character() {
     let mut s = blank(2);
+    s.players[1].empire = vec![id("Industrial Complex")]; // Materials 2 + 1, like Noram's 3
     start_production(&mut s);
-    assert_eq!(s.players[0].generals, 1, "Materials: only seat 0 has any");
-    skip_to(&mut s, 1);
-    // Both Empires start with one Energy icon.
-    assert_eq!((s.players[0].produced, s.players[1].produced), (1, 1));
-    assert!(s.log.contains(&Event::Supremacy { res: Res::Energy, seat: None }));
-    assert_eq!(s.players[0].generals, 1);
-    assert_eq!(s.players[1].generals + s.players[1].financiers, 0, "nobody took the Energy character");
+    assert_eq!((s.players[0].produced, s.players[1].produced), (3, 3));
+    assert!(s.log.contains(&Event::Supremacy { res: Res::Materials, seat: None }));
+    for p in &s.players {
+        assert_eq!(p.generals + p.financiers, 0, "nobody took the Materials character");
+    }
 }
 
 #[test]
-fn every_resource_is_covered_by_the_empires() {
-    // Each Empire starts with three icons, and each resource is on three Empires.
+fn the_empires_are_the_base_games_side_a() {
     for empire in EMPIRES {
-        assert_eq!(empire.base.iter().map(|&n| n as u32).sum::<u32>(), 3, "{}", empire.name);
+        let icons: u32 = empire.base.iter().map(|&n| n as u32).sum();
+        assert!((3..=4).contains(&icons), "{}", empire.name);
+        assert!(empire.combo.is_some() != empire.per_token.is_some(), "{} scores one way", empire.name);
     }
     for res in Res::ALL {
-        assert_eq!(EMPIRES.iter().filter(|e| e.base[res.index()] > 0).count(), 3, "{res:?}");
+        assert!(EMPIRES.iter().any(|e| e.base[res.index()] > 0), "{res:?}");
     }
     let mut names: Vec<_> = EMPIRES.iter().map(|e| e.name).collect();
     names.sort();
@@ -516,7 +541,7 @@ fn every_resource_is_covered_by_the_empires() {
 #[test]
 fn the_science_winner_chooses_the_character() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Observatory")]; // Science 2 against 1
+    s.players[0].empire = vec![id("Research Center")]; // Science 2 against 1
     start_production(&mut s);
     skip_to(&mut s, 2);
     assert!(s.players[0].choose);
@@ -525,7 +550,7 @@ fn the_science_winner_chooses_the_character() {
     assert_eq!(s.apply(1, Action::Choose { token: Token::General }), Err(Error::NothingToChoose));
     s.apply(0, Action::Choose { token: Token::Financier }).unwrap();
     assert!(!s.players[0].choose);
-    assert_eq!(s.players[0].financiers, 1);
+    assert_eq!(s.players[0].financiers, 2, "one for Materials, one chosen");
     assert!(s.log.contains(&Event::Chose { seat: 0, token: Token::Financier }));
     assert_eq!(s.apply(0, Action::Choose { token: Token::General }), Err(Error::NothingToChoose));
     // The cubes are still to be placed.
@@ -535,59 +560,59 @@ fn the_science_winner_chooses_the_character() {
 #[test]
 fn cubes_come_from_the_pool_and_the_rest_is_lost() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Smelter")]; // Materials 1 + 2 = 3
-    s.players[0].buildings = vec![Building { card: id("Quarry"), filled: Cost::default() }]; // needs 2 Materials
+    // Noram States makes 3 Materials; the Recycling Plant needs 2.
+    s.players[0].buildings = vec![Building { card: id("Recycling Plant"), filled: Cost::default() }];
     start_production(&mut s);
     assert_eq!(s.players[0].pool, 3);
 
     let materials = Piece::Cube(Res::Materials);
-    let quarry = Target::Card(id("Quarry"));
+    let plant = Target::Card(id("Recycling Plant"));
     // Wrong resource for this step, and a building that isn't there.
     assert_eq!(
-        s.apply(0, Action::Place { piece: Piece::Cube(Res::Energy), target: quarry }),
+        s.apply(0, Action::Place { piece: Piece::Cube(Res::Energy), target: plant }),
         Err(Error::NothingToPlace)
     );
     assert_eq!(
-        s.apply(0, Action::Place { piece: materials, target: Target::Card(id("Smelter")) }),
+        s.apply(0, Action::Place { piece: materials, target: Target::Card(id("Nuclear Plant")) }),
         Err(Error::InvalidTarget)
     );
     assert_eq!(s.players[0].pool, 3, "refused moves cost nothing");
 
-    s.apply(0, Action::Place { piece: materials, target: quarry }).unwrap();
+    s.apply(0, Action::Place { piece: materials, target: plant }).unwrap();
     assert_eq!(s.players[0].pool, 2);
     assert_eq!(s.players[0].buildings[0].filled.res[0], 1);
-    s.apply(0, Action::Place { piece: materials, target: quarry }).unwrap();
-    assert!(s.players[0].buildings.is_empty(), "the Quarry is finished");
-    assert!(s.players[0].empire.contains(&id("Quarry")));
-    // The Quarry is full now (and gone), so the last cube goes to the Empire.
-    assert_eq!(s.apply(0, Action::Place { piece: materials, target: quarry }), Err(Error::InvalidTarget));
+    s.apply(0, Action::Place { piece: materials, target: plant }).unwrap();
+    assert!(s.players[0].buildings.is_empty(), "the Recycling Plant is finished");
+    assert!(s.players[0].empire.contains(&id("Recycling Plant")));
+    // It is full now (and gone), so the last cube goes to the Empire.
+    assert_eq!(s.apply(0, Action::Place { piece: materials, target: plant }), Err(Error::InvalidTarget));
     s.apply(0, Action::Place { piece: materials, target: Target::Empire }).unwrap();
     assert_eq!(s.players[0].empire_cubes, 1);
-    // Everything was placed and seat 1 had nothing to do: Energy is next.
+    assert!(s.players[0].ready, "everything placed");
+    assert_eq!(s.phase, Phase::Production { step: 0 }, "seat 1 still has its cubes");
+    s.apply(1, Action::Ready).unwrap();
     assert_eq!(s.phase, Phase::Production { step: 1 });
-    assert_eq!(s.players[0].pool, 1, "that is the new step's cube, not a left-over");
+    assert_eq!(s.players[0].pool, 0, "no Energy, and nothing left over");
 }
 
 #[test]
 fn saying_ready_throws_away_the_cubes_left() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Smelter")];
     start_production(&mut s);
     assert_eq!(s.players[0].pool, 3);
     s.apply(0, Action::Ready).unwrap();
+    s.apply(1, Action::Ready).unwrap();
     assert_eq!(s.players[0].empire_cubes, 0, "nothing was placed");
-    // Seat 1 had nothing to do in the Materials step, so the game moved on
-    // to Energy, where both have a cube; the Materials cubes are gone.
+    // Energy now, where only seat 1 makes anything; the Materials cubes are gone.
     assert_eq!(s.phase, Phase::Production { step: 1 });
-    assert_eq!(s.players[0].produced, 1);
-    assert_eq!(s.players[0].pool, 1);
-    assert_eq!(s.players[0].pending, [0; 5]);
+    assert_eq!((s.players[0].produced, s.players[0].pool), (0, 0));
+    assert_eq!((s.players[1].produced, s.players[1].pool), (1, 1));
 }
 
 #[test]
 fn five_cubes_on_the_empire_make_krystallium() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Smelter"), twin("Smelter"), id("Great Wall")]; // 1 + 2 + 2 + 2
+    s.players[0].empire = vec![id("Recycling Plant"), twin("Recycling Plant")]; // 3 + 2 + 2
     start_production(&mut s);
     assert_eq!(s.players[0].pool, 7);
     for _ in 0..5 {
@@ -604,86 +629,99 @@ fn five_cubes_on_the_empire_make_krystallium() {
 #[test]
 fn krystallium_stands_in_for_any_cube_but_not_for_characters() {
     let mut s = blank(2);
-    // Seat 1 produces no Materials, so it takes no character at the start.
-    // Bastion: 3 Materials and a General.
-    s.players[1].buildings = vec![Building { card: id("Bastion"), filled: Cost::default() }];
-    s.players[1].krystallium = 3;
-    s.players[1].generals = 1;
+    // Seat 1 makes less Materials than seat 0, so it takes no character at
+    // the start. Center of the Earth: 5 Exploration and two Generals.
+    s.players[1].buildings = vec![Building { card: id("Center of the Earth"), filled: Cost::default() }];
+    s.players[1].krystallium = 5;
+    s.players[1].generals = 2;
     s.players[1].financiers = 1;
     start_production(&mut s);
-    let bastion = Target::Card(id("Bastion"));
-    // No Energy space on it, nor a character space for a Financier.
-    assert_eq!(
-        s.apply(1, Action::Place { piece: Piece::Krystallium(Res::Energy), target: bastion }),
-        Err(Error::InvalidTarget)
-    );
-    assert_eq!(s.apply(1, Action::Place { piece: Piece::Financier, target: bastion }), Err(Error::InvalidTarget));
+    let center = Target::Card(id("Center of the Earth"));
+    // No Energy space on it, no Krystallium space, nor a character space for a Financier.
+    for piece in [Piece::Krystallium(Some(Res::Energy)), Piece::Krystallium(None), Piece::Financier] {
+        assert_eq!(s.apply(1, Action::Place { piece, target: center }), Err(Error::InvalidTarget), "{piece:?}");
+    }
     // Krystallium doesn't go on the Empire.
     assert_eq!(
-        s.apply(1, Action::Place { piece: Piece::Krystallium(Res::Materials), target: Target::Empire }),
+        s.apply(1, Action::Place { piece: Piece::Krystallium(Some(Res::Materials)), target: Target::Empire }),
         Err(Error::InvalidTarget)
     );
-    for _ in 0..3 {
-        s.apply(1, Action::Place { piece: Piece::Krystallium(Res::Materials), target: bastion }).unwrap();
+    for _ in 0..5 {
+        s.apply(1, Action::Place { piece: Piece::Krystallium(Some(Res::Exploration)), target: center }).unwrap();
     }
     assert_eq!(s.players[1].krystallium, 0);
-    assert_eq!(s.players[1].buildings.len(), 1, "still needs its General");
-    s.apply(1, Action::Place { piece: Piece::General, target: bastion }).unwrap();
+    for _ in 0..2 {
+        assert_eq!(s.players[1].buildings.len(), 1, "still needs its Generals");
+        s.apply(1, Action::Place { piece: Piece::General, target: center }).unwrap();
+    }
     assert!(s.players[1].buildings.is_empty());
-    assert!(s.players[1].empire.contains(&id("Bastion")));
+    assert!(s.players[1].empire.contains(&id("Center of the Earth")));
     assert_eq!(s.players[1].generals, 0);
+}
+
+#[test]
+fn some_spaces_take_only_krystallium() {
+    let mut s = blank(2);
+    // Secret Society: 3 Gold (all placed here) and a Krystallium.
+    let gold_placed = Cost { res: [0, 0, 0, 3, 0], ..Cost::default() };
+    s.players[0].buildings = vec![
+        Building { card: id("Secret Society"), filled: gold_placed },
+        Building { card: id("Recycling Plant"), filled: Cost::default() },
+    ];
+    s.players[0].krystallium = 2;
+    let society = Target::Card(id("Secret Society"));
+    assert_eq!(s.players[0].buildings[0].remaining(), Cost { krystallium: 1, ..Cost::default() });
+    // Standing in for Gold, there's no space left; and the plant has no Krystallium space.
+    assert_eq!(
+        s.apply(0, Action::Place { piece: Piece::Krystallium(Some(Res::Gold)), target: society }),
+        Err(Error::InvalidTarget)
+    );
+    let plant = Target::Card(id("Recycling Plant"));
+    assert_eq!(s.apply(0, Action::Place { piece: Piece::Krystallium(None), target: plant }), Err(Error::InvalidTarget));
+    // In planning already.
+    s.apply(0, Action::Place { piece: Piece::Krystallium(None), target: society }).unwrap();
+    assert!(s.players[0].empire.contains(&id("Secret Society")));
+    assert_eq!(s.players[0].krystallium, 1);
 }
 
 #[test]
 fn you_cannot_place_what_you_do_not_hold() {
     let mut s = blank(2);
-    s.players[1].buildings = vec![Building { card: id("Bastion"), filled: Cost::default() }];
+    s.players[1].buildings = vec![Building { card: id("Center of the Earth"), filled: Cost::default() }];
     start_production(&mut s);
-    let bastion = Target::Card(id("Bastion"));
-    assert_eq!(s.apply(1, Action::Place { piece: Piece::General, target: bastion }), Err(Error::NothingToPlace));
+    let center = Target::Card(id("Center of the Earth"));
+    assert_eq!(s.apply(1, Action::Place { piece: Piece::General, target: center }), Err(Error::NothingToPlace));
     assert_eq!(
-        s.apply(1, Action::Place { piece: Piece::Krystallium(Res::Materials), target: bastion }),
+        s.apply(1, Action::Place { piece: Piece::Krystallium(Some(Res::Exploration)), target: center }),
         Err(Error::NothingToPlace)
     );
-}
-
-#[test]
-fn bonus_cubes_can_be_placed_whenever() {
-    let mut s = blank(2);
-    s.players[0].pending = [0, 1, 0, 0, 0];
-    s.players[0].buildings = vec![Building { card: id("Hover Cart"), filled: Cost::default() }];
-    // In planning already...
-    s.apply(0, Action::Place { piece: Piece::Cube(Res::Energy), target: Target::Card(id("Hover Cart")) }).unwrap();
-    assert_eq!(s.players[0].pending, [0; 5]);
-    assert_eq!(
-        s.apply(0, Action::Place { piece: Piece::Cube(Res::Energy), target: Target::Empire }),
-        Err(Error::NothingToPlace)
-    );
+    // Cubes are only held during their own production step.
+    s.players[1].buildings.push(Building { card: id("Zeppelin"), filled: Cost::default() });
+    let zeppelin = Target::Card(id("Zeppelin"));
+    assert_eq!(s.apply(1, Action::Place { piece: Piece::Cube(Res::Energy), target: zeppelin }), Err(Error::NothingToPlace));
 }
 
 #[test]
 fn a_building_finished_in_one_step_produces_in_the_next() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Quarry")]; // Materials 2
     s.players[0].buildings = vec![Building {
-        card: id("Hover Cart"),
+        card: id("Wind Turbines"),
         filled: Cost { res: [1, 0, 0, 0, 0], ..Cost::default() },
     }];
-    s.players[0].pending = [0, 1, 0, 0, 0];
     start_production(&mut s);
-    assert_eq!(s.players[0].produced, 2);
-    assert_eq!(s.players[1].produced, 0);
-    // Finish the Hover Cart (Energy 1) with a bonus cube during Materials...
-    s.apply(0, Action::Place { piece: Piece::Cube(Res::Energy), target: Target::Card(id("Hover Cart")) }).unwrap();
+    assert_eq!(s.players[0].produced, 3);
+    // Finish the Wind Turbines (Energy 1) during Materials...
+    s.apply(0, Action::Place { piece: Piece::Cube(Res::Materials), target: Target::Card(id("Wind Turbines")) })
+        .unwrap();
     skip_to(&mut s, 1);
-    // ...and it already produces Energy in the next step: the Empire's 1 + the cart's 1.
-    assert_eq!(s.players[0].produced, 2);
+    // ...and they already produce in the Energy step (Noram States has no Energy icon).
+    assert_eq!(s.players[0].produced, 1);
 }
 
 #[test]
 fn only_players_with_something_to_place_wait_in_the_wrap_up() {
     let mut s = blank(2);
-    s.players[0].buildings = vec![Building { card: id("Quarry"), filled: Cost::default() }];
+    s.players[0].buildings = vec![Building { card: id("Recycling Plant"), filled: Cost::default() }];
     s.players[0].krystallium = 1;
     s.players[1].krystallium = 1; // nothing to put it on
     start_production(&mut s);
@@ -691,7 +729,8 @@ fn only_players_with_something_to_place_wait_in_the_wrap_up() {
     assert!(!s.players[0].ready);
     assert!(s.players[1].ready);
     assert_eq!(s.round, 1);
-    s.apply(0, Action::Place { piece: Piece::Krystallium(Res::Materials), target: Target::Card(id("Quarry")) }).unwrap();
+    let plant = Target::Card(id("Recycling Plant"));
+    s.apply(0, Action::Place { piece: Piece::Krystallium(Some(Res::Materials)), target: plant }).unwrap();
     assert_eq!(s.phase, Phase::Production { step: WRAP_UP }, "still going: it may place more");
     s.apply(0, Action::Ready).unwrap();
     assert_eq!((s.round, s.phase), (2, Phase::Draft));
@@ -700,16 +739,14 @@ fn only_players_with_something_to_place_wait_in_the_wrap_up() {
 #[test]
 fn the_round_ends_by_dealing_the_next_one() {
     let mut s = blank(2);
-    s.players[0].buildings = vec![Building { card: id("Quarry"), filled: Cost::default() }];
-    s.players[0].pending = [3, 0, 0, 0, 0];
+    s.players[0].buildings = vec![Building { card: id("Recycling Plant"), filled: Cost::default() }];
     s.players[0].krystallium = 2;
     start_production(&mut s);
     skip_to(&mut s, WRAP_UP);
     s.apply(0, Action::Ready).unwrap();
     assert_eq!((s.round, s.phase), (2, Phase::Draft));
-    // Leftover bonus cubes went to the Empire; buildings and Krystallium stay.
-    assert_eq!(s.players[0].pending, [0; 5]);
-    assert_eq!(s.players[0].empire_cubes, 3);
+    // Unplaced cubes are gone; buildings and Krystallium stay.
+    assert_eq!(s.players[0].empire_cubes, 0);
     assert_eq!(s.players[0].buildings.len(), 1);
     assert_eq!(s.players[0].krystallium, 2);
     // New hands, nobody ready, nothing picked.
@@ -722,15 +759,11 @@ fn the_round_ends_by_dealing_the_next_one() {
 }
 
 #[test]
-fn leftover_bonus_cubes_still_make_krystallium() {
+fn a_round_with_nothing_to_wrap_up_skips_the_step() {
     let mut s = blank(2);
-    s.players[0].pending = [0, 0, 0, 0, 5];
     start_production(&mut s);
-    // Nobody can place anything in the wrap-up, so the game skips it.
     finish_round(&mut s);
-    assert_eq!(s.round, 2);
-    assert_eq!((s.players[0].krystallium, s.players[0].empire_cubes), (1, 0));
-    assert_eq!(s.players[0].pending, [0; 5]);
+    assert_eq!((s.round, s.phase), (2, Phase::Draft));
 }
 
 // ----- scoring -------------------------------------------------------------
@@ -738,32 +771,51 @@ fn leftover_bonus_cubes_still_make_krystallium() {
 #[test]
 fn points_add_up_from_cards_types_and_characters() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Skyline Tower"), id("Quarry"), id("Smelter"), id("Archive Vault")];
+    s.players[0].empire = vec![
+        id("Island of Avalon"),       // 7
+        id("Bionic Grafts"),          // 4
+        id("Transportation Network"), // 1 per Vehicle
+        id("Zeppelin"),
+        id("Tank Division"),
+        id("Security Automatons"), // 1 per General
+    ];
     s.players[0].generals = 1;
     s.players[0].financiers = 2;
     let score = s.score_of(0);
-    // Printed points 3 + 1 + 1 + 2.
-    assert_eq!(score.gross, 7);
-    // The Tower: 1 per Structure (all four); the Vault: 1 per Financier (2).
-    assert_eq!(score.combo, 4 + 2);
+    assert_eq!(score.gross, 7 + 4);
+    // Two Vehicles, one General, and Noram States' 1 per Financier (2).
+    assert_eq!(score.combo, 2 + 1 + 2);
     assert_eq!((score.generals, score.financiers), (1, 2));
-    assert_eq!(score.total, 7 + 6 + 1 + 2);
-    assert_eq!(score.cards, 4);
+    assert_eq!(score.total, 11 + 5 + 1 + 2);
+    assert_eq!(score.cards, 6);
     // Cubes, Krystallium and unfinished buildings are worth nothing.
     s.players[0].krystallium = 4;
     s.players[0].empire_cubes = 3;
-    s.players[0].buildings = vec![Building { card: id("Monument"), filled: Cost::default() }];
+    s.players[0].buildings = vec![Building { card: id("Time Travel"), filled: Cost::default() }];
     assert_eq!(s.score_of(0), score);
 }
 
 #[test]
 fn combos_count_the_cards_you_own_of_a_type() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Legacy Hall"), id("Opera House"), id("Aqueduct"), id("Quarry")];
-    // Legacy Hall: 2 per Project (it, the Opera House and the Aqueduct).
+    s.players[0].empire = vec![id("National Monument"), id("Giant Tower"), id("Espionage Agency"), id("Recycling Plant")];
+    // National Monument: 2 per Project (it, the Giant Tower and the Espionage Agency).
     let score = s.score_of(0);
     assert_eq!(score.combo, 6);
-    assert_eq!(score.gross, 2 + 4 + 2 + 1);
+    assert_eq!(score.gross, 10 + 1);
+}
+
+#[test]
+fn the_empire_scores_too() {
+    let mut s = blank(3);
+    // The Federation of Asia: 2 per Project.
+    assert_eq!(EMPIRES[2].name, "Federation of Asia");
+    s.players[2].empire = vec![id("Giant Tower"), id("Espionage Agency"), id("Zeppelin")];
+    assert_eq!(s.score_of(2).combo, 4);
+    // The Republic of Europe: 1 per General, on top of the General's own point.
+    s.players[1].generals = 3;
+    let europe = s.score_of(1);
+    assert_eq!((europe.combo, europe.generals, europe.total), (3, 3, 6));
 }
 
 fn finished(s: &mut State) {
@@ -774,9 +826,9 @@ fn finished(s: &mut State) {
 #[test]
 fn the_most_points_win() {
     let mut s = blank(3);
-    s.players[0].empire = vec![id("Monument")];
-    s.players[1].empire = vec![id("Utopia Plan")];
-    s.players[2].empire = vec![id("Quarry")];
+    s.players[0].empire = vec![id("Island of Avalon")];
+    s.players[1].empire = vec![id("Time Travel")];
+    s.players[2].empire = vec![id("Bionic Grafts")];
     assert!(s.winners().is_empty(), "nobody wins before the end");
     finished(&mut s);
     assert_eq!(s.winners(), vec![1]);
@@ -784,28 +836,28 @@ fn the_most_points_win() {
 
 #[test]
 fn ties_go_to_the_most_cards_then_the_most_characters_then_are_shared() {
-    // Same points: one point and a General against a single card of one point.
+    // Same points: a 2-point card against a General (1, and 1 more from the
+    // Republic of Europe).
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Quarry")];
+    s.players[0].empire = vec![id("Blackbeard's Treasure")];
     s.players[1].generals = 1;
-    s.players[1].empire = vec![];
     finished(&mut s);
-    assert_eq!((s.scores[0].total, s.scores[1].total), (1, 1));
+    assert_eq!((s.scores[0].total, s.scores[1].total), (2, 2));
     assert_eq!(s.winners(), vec![0], "more finished cards");
 
     // Same points, same number of cards: 1 + 2 characters against 3 points.
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Smelter")];
+    s.players[0].empire = vec![id("Human Cloning")];
     s.players[0].generals = 2;
-    s.players[1].empire = vec![id("Bastion")];
+    s.players[1].empire = vec![id("Cities of Gold")];
     finished(&mut s);
     assert_eq!((s.scores[0].total, s.scores[1].total), (3, 3));
     assert_eq!(s.winners(), vec![0], "more characters");
 
     // Everything level: they share the win.
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Quarry")];
-    s.players[1].empire = vec![twin("Quarry")];
+    s.players[0].empire = vec![id("Recycling Plant")];
+    s.players[1].empire = vec![twin("Recycling Plant")];
     finished(&mut s);
     assert_eq!(s.winners(), vec![0, 1]);
 }
@@ -858,9 +910,12 @@ fn bot(s: &State, seat: usize, turn: usize) -> Option<Action> {
             for b in &p.buildings {
                 let left = b.remaining();
                 let target = Target::Card(b.card);
+                if p.krystallium > 0 && left.krystallium > 0 {
+                    return Some(Action::Place { piece: Piece::Krystallium(None), target });
+                }
                 if p.krystallium > 0 {
                     if let Some(res) = Res::ALL.iter().find(|r| left.res[r.index()] > 0) {
-                        return Some(Action::Place { piece: Piece::Krystallium(*res), target });
+                        return Some(Action::Place { piece: Piece::Krystallium(Some(*res)), target });
                     }
                 }
                 if p.generals > 0 && left.generals > 0 {
@@ -950,9 +1005,12 @@ fn smart_bot(s: &State, seat: usize, _turn: usize) -> Option<Action> {
                 if p.financiers > 0 && left.financiers > 0 {
                     return Some(Action::Place { piece: Piece::Financier, target });
                 }
+                if p.krystallium > 0 && left.krystallium > 0 {
+                    return Some(Action::Place { piece: Piece::Krystallium(None), target });
+                }
                 if p.krystallium > 0 {
                     if let Some(res) = Res::ALL.iter().find(|r| left.res[r.index()] > 0) {
-                        return Some(Action::Place { piece: Piece::Krystallium(*res), target });
+                        return Some(Action::Place { piece: Piece::Krystallium(Some(*res)), target });
                     }
                 }
             }
@@ -1004,7 +1062,6 @@ fn whole_games_end_for_every_player_count() {
                 assert!(!s.winners().is_empty());
                 for p in &s.players {
                     assert!(p.hand.is_empty() && p.drafted.is_empty() && p.picked.is_none());
-                    assert_eq!(p.pending, [0; 5]);
                 }
                 // Four rounds of drafting used this much of the deck.
                 let dealt = ROUNDS as usize * n * hand_size(n);
@@ -1107,13 +1164,13 @@ fn the_draft_area_stays_private_until_cards_are_built() {
 #[test]
 fn a_view_shows_the_table() {
     let mut s = blank(2);
-    s.players[0].empire = vec![id("Quarry")];
+    s.players[0].empire = vec![id("Island of Avalon")];
     s.players[0].generals = 1;
     let v = s.view_for(1);
     assert_eq!((v.you, v.round, v.phase), (1, 1, Phase::Planning));
     assert!(v.passes_to_next);
-    assert_eq!(v.players[0].production, [2, 1, 0, 1, 0]);
-    assert_eq!(v.players[0].points, 2);
+    assert_eq!(v.players[0].production, [3, 0, 1, 1, 0]);
+    assert_eq!(v.players[0].points, 7 + 1);
     assert_eq!(v.players[0].generals, 1);
     assert_eq!(v.deck, s.deck.len());
     assert!(v.scores.is_empty() && v.winners.is_empty());
@@ -1163,8 +1220,9 @@ fn actions_survive_json() {
         Action::Draft { card: CardId(3) },
         Action::Build { card: CardId(4) },
         Action::Recycle { card: CardId(5), to: Target::Empire },
-        Action::Scrap { card: CardId(6), to: Target::Card(CardId(7)) },
-        Action::Place { piece: Piece::Krystallium(Res::Gold), target: Target::Card(CardId(8)) },
+        Action::Scrap { card: CardId(6) },
+        Action::Place { piece: Piece::Krystallium(Some(Res::Gold)), target: Target::Card(CardId(8)) },
+        Action::Place { piece: Piece::Krystallium(None), target: Target::Card(CardId(7)) },
         Action::Place { piece: Piece::Cube(Res::Science), target: Target::Empire },
         Action::Place { piece: Piece::General, target: Target::Card(CardId(9)) },
         Action::Choose { token: Token::Financier },

@@ -1,11 +1,10 @@
 //! The pieces of the game and the card catalogue.
 //!
-//! **The catalogue is an original, placeholder set.** It follows the shape
-//! of the real game (five resources, five card types, construction costs,
-//! production icons, recycling and construction bonuses, victory points
-//! from cards, card types and characters) but none of the numbers are the
-//! real cards'. The whole catalogue is the one table in [`designs`]; replace
-//! its rows (and keep [`DESIGNS`] and [`COPIES`] in step) to change the cards.
+//! The catalogue is the published base game: 78 designs, 150 cards, and the
+//! five Empires (side A). The numbers were taken from Game Park's online
+//! implementation (github.com/gamepark/its-a-wonderful-world, `Developments.ts`
+//! and `Empires.ts`). The whole catalogue is the one table in [`designs`],
+//! with each design's number of copies, and [`EMPIRES`] below it.
 
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -41,8 +40,8 @@ impl Res {
     /// `None` for Science, where the winner chooses.
     pub fn supremacy_token(self) -> Option<Token> {
         match self {
-            Res::Materials | Res::Energy => Some(Token::General),
-            Res::Gold | Res::Exploration => Some(Token::Financier),
+            Res::Materials | Res::Gold => Some(Token::Financier),
+            Res::Energy | Res::Exploration => Some(Token::General),
             Res::Science => None,
         }
     }
@@ -93,13 +92,18 @@ impl Token {
 pub struct Cost {
     /// Spaces for resource cubes, in [`Res::ALL`] order.
     pub res: [u8; 5],
+    /// Spaces only Krystallium can fill.
+    pub krystallium: u8,
     pub generals: u8,
     pub financiers: u8,
 }
 
 impl Cost {
     pub fn total(&self) -> u32 {
-        self.res.iter().map(|&n| n as u32).sum::<u32>() + self.generals as u32 + self.financiers as u32
+        self.res.iter().map(|&n| n as u32).sum::<u32>()
+            + self.krystallium as u32
+            + self.generals as u32
+            + self.financiers as u32
     }
 
     /// What is still missing when `filled` has been placed.
@@ -110,6 +114,7 @@ impl Cost {
         }
         Cost {
             res,
+            krystallium: self.krystallium.saturating_sub(filled.krystallium),
             generals: self.generals.saturating_sub(filled.generals),
             financiers: self.financiers.saturating_sub(filled.financiers),
         }
@@ -120,24 +125,22 @@ impl Cost {
     }
 }
 
-/// What a card hands over the moment it is finished.
+/// One thing a card hands over the moment it is finished. It is kept, like
+/// the characters and Krystallium won any other way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Bonus {
-    /// A cube of this resource, to place on a card or on your Empire.
-    Cube(Res),
     Krystallium,
     Token(Token),
 }
 
-/// Identifies one physical card of the deck. The deck holds [`COPIES`]
-/// copies of every design, told apart by their number.
+/// Identifies one physical card of the deck. The first [`DESIGNS`] ids are
+/// one card of each design, in catalogue order; the extra copies follow.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CardId(pub u16);
 
 impl CardId {
     pub fn def(self) -> &'static Card {
-        let all = catalogue();
-        &all[self.0 as usize % all.len()]
+        &catalogue()[deck_designs()[self.0 as usize % DECK_SIZE]]
     }
 }
 
@@ -152,7 +155,8 @@ pub struct Card {
     pub scaled: Option<(Res, Kind)>,
     /// The cube you take when you recycle the card.
     pub recycle: Res,
-    pub bonus: Option<Bonus>,
+    /// What finishing the card hands over (several of a kind, at most).
+    pub bonus: &'static [Bonus],
     /// Points that depend on nothing.
     pub vp: u8,
     /// Points for each card of this type you own (this one included if it
@@ -160,6 +164,8 @@ pub struct Card {
     pub combo: Option<(Kind, u8)>,
     /// Extra points for each character token of this type you hold.
     pub per_token: Option<(Token, u8)>,
+    /// How many cards of this design are in the deck.
+    pub copies: u8,
 }
 
 impl Card {
@@ -167,15 +173,22 @@ impl Card {
         Card {
             name,
             kind,
-            cost: Cost { res: cost, generals: 0, financiers: 0 },
+            cost: Cost { res: cost, ..Cost::default() },
             produces,
             scaled: None,
             recycle,
-            bonus: None,
+            bonus: &[],
             vp,
             combo: None,
             per_token: None,
+            copies: 1,
         }
+    }
+
+    /// Spaces in the cost that only Krystallium fills.
+    fn krystallium(mut self, n: u8) -> Card {
+        self.cost.krystallium = n;
+        self
     }
 
     /// Character spaces in the cost: `g` Generals and `f` Financiers.
@@ -190,8 +203,8 @@ impl Card {
         self
     }
 
-    fn bonus(mut self, bonus: Bonus) -> Card {
-        self.bonus = Some(bonus);
+    fn bonus(mut self, bonus: &'static [Bonus]) -> Card {
+        self.bonus = bonus;
         self
     }
 
@@ -204,132 +217,158 @@ impl Card {
         self.per_token = Some((token, points));
         self
     }
+
+    fn copies(mut self, n: u8) -> Card {
+        self.copies = n;
+        self
+    }
 }
 
-/// How many designs the catalogue has, and how many copies of each are in
-/// the deck: 75 × 2 = 150 cards, enough for five players.
-pub const DESIGNS: usize = 75;
-pub const COPIES: usize = 2;
-pub const DECK_SIZE: usize = DESIGNS * COPIES;
+/// How many designs the catalogue has, and how many cards the deck holds
+/// once every design's copies are counted.
+pub const DESIGNS: usize = 78;
+pub const DECK_SIZE: usize = 150;
 
 static CATALOGUE: OnceLock<Vec<Card>> = OnceLock::new();
+static DECK_DESIGNS: OnceLock<Vec<usize>> = OnceLock::new();
 
-/// Every design, indexed by `CardId.0 % DESIGNS`.
+/// Every design, in catalogue order.
 pub fn catalogue() -> &'static [Card] {
     CATALOGUE.get_or_init(designs)
 }
 
-/// The starting production of an Empire. Seat `i` plays Empire `i`.
+/// The design of every card of the deck, indexed by `CardId.0`: one of each
+/// design first, then each design's extra copies.
+fn deck_designs() -> &'static [usize] {
+    DECK_DESIGNS.get_or_init(|| {
+        let all = catalogue();
+        let mut deck: Vec<usize> = (0..all.len()).collect();
+        for (design, card) in all.iter().enumerate() {
+            deck.extend(std::iter::repeat_n(design, card.copies as usize - 1));
+        }
+        debug_assert_eq!(deck.len(), DECK_SIZE);
+        deck
+    })
+}
+
+/// An Empire card (side A): the production every seat starts with, and the
+/// points it scores at the end. Seat `i` plays Empire `i`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Empire {
     pub name: &'static str,
     pub base: [u8; 5],
+    /// Points for each card of this type you own.
+    pub combo: Option<(Kind, u8)>,
+    /// Points for each character token of this type you hold.
+    pub per_token: Option<(Token, u8)>,
 }
 
 pub const EMPIRES: [Empire; 5] = [
-    Empire { name: "Aurelian Union", base: [1, 1, 0, 1, 0] },
-    Empire { name: "Meridian League", base: [0, 1, 1, 0, 1] },
-    Empire { name: "Solar Concord", base: [1, 0, 1, 1, 0] },
-    Empire { name: "Verdant Pact", base: [0, 1, 0, 1, 1] },
-    Empire { name: "Obsidian Court", base: [1, 0, 1, 0, 1] },
+    Empire { name: "Noram States", base: [3, 0, 0, 1, 0], combo: None, per_token: Some((Token::Financier, 1)) },
+    Empire { name: "Republic of Europe", base: [2, 1, 1, 0, 0], combo: None, per_token: Some((Token::General, 1)) },
+    Empire { name: "Federation of Asia", base: [1, 0, 0, 2, 0], combo: Some((Kind::Project, 2)), per_token: None },
+    Empire { name: "Panafrican Union", base: [2, 0, 2, 0, 0], combo: Some((Kind::Research, 2)), per_token: None },
+    Empire { name: "Aztec Empire", base: [0, 2, 0, 0, 1], combo: Some((Kind::Discovery, 3)), per_token: None },
 ];
 
-#[allow(clippy::vec_init_then_push)]
 fn designs() -> Vec<Card> {
-    use Bonus::{Cube, Krystallium};
     use Kind::{Discovery, Project, Research, Structure, Vehicle};
     use Res::{Energy as E, Exploration as X, Gold as G, Materials as M, Science as S};
-    let general = Bonus::Token(Token::General);
-    let financier = Bonus::Token(Token::Financier);
+    const KRYSTALLIUM: Bonus = Bonus::Krystallium;
+    const GENERAL: Bonus = Bonus::Token(Token::General);
+    const FINANCIER: Bonus = Bonus::Token(Token::Financier);
     let c = Card::new;
 
-    let mut v = Vec::with_capacity(DESIGNS);
+    let v = vec![
+        // Structures (9 designs, 50 cards).
+        c("Financial Center", Structure, [4, 1, 0, 0, 0], [0, 0, 0, 2, 0], G, 0).bonus(&[FINANCIER]).copies(5),
+        c("Industrial Complex", Structure, [3, 1, 0, 0, 0], [1, 0, 0, 1, 0], G, 0).bonus(&[FINANCIER]).copies(6),
+        c("Military Base", Structure, [3, 1, 0, 0, 0], [1, 0, 1, 0, 0], M, 0).bonus(&[GENERAL]).copies(6),
+        c("Nuclear Plant", Structure, [4, 0, 1, 0, 0], [0, 3, 0, 0, 0], E, 0).copies(5),
+        c("Offshore Oil Rig", Structure, [3, 0, 0, 0, 1], [0, 1, 0, 1, 0], E, 0).bonus(&[FINANCIER]).copies(5),
+        c("Recycling Plant", Structure, [2, 0, 0, 0, 0], [2, 0, 0, 0, 0], M, 0).copies(7),
+        c("Research Center", Structure, [3, 1, 0, 0, 0], [0, 0, 2, 0, 0], S, 0).copies(7),
+        c("Transportation Network", Structure, [3, 0, 0, 0, 0], [0; 5], M, 0).combo(Vehicle, 1).copies(2),
+        c("Wind Turbines", Structure, [2, 0, 0, 0, 0], [0, 1, 0, 0, 0], E, 0).copies(7),
 
-    // Structures: materials, energy and gold; solid points.
-    v.push(c("Quarry", Structure, [2, 0, 0, 0, 0], [1, 0, 0, 0, 0], M, 1));
-    v.push(c("Smelter", Structure, [3, 1, 0, 0, 0], [2, 0, 0, 0, 0], E, 1));
-    v.push(c("Wind Farm", Structure, [1, 2, 0, 0, 0], [0, 1, 0, 0, 0], E, 1));
-    v.push(c("Reactor Hall", Structure, [2, 3, 0, 0, 0], [0, 2, 0, 0, 0], E, 2));
-    v.push(c("Granary", Structure, [2, 0, 0, 1, 0], [0, 0, 0, 1, 0], G, 2));
-    v.push(c("Bazaar", Structure, [1, 0, 0, 3, 0], [0, 0, 0, 2, 0], G, 1).bonus(financier));
-    v.push(c("Bastion", Structure, [3, 0, 0, 0, 0], [1, 0, 0, 0, 0], M, 3).chars(1, 0));
-    v.push(c("Skyline Tower", Structure, [4, 1, 0, 2, 0], [0; 5], M, 3).combo(Structure, 1));
-    v.push(c("Dome Habitat", Structure, [2, 1, 1, 0, 0], [0, 0, 1, 0, 0], S, 2));
-    v.push(c("Harbor Works", Structure, [2, 0, 0, 1, 1], [0, 0, 0, 0, 1], X, 1));
-    v.push(c("Great Wall", Structure, [5, 0, 0, 0, 0], [2, 0, 0, 0, 0], M, 4).chars(1, 0));
-    v.push(c("Civic Forum", Structure, [3, 0, 1, 2, 0], [0; 5], G, 2).chars(0, 1).combo(Project, 1));
-    v.push(c("Mega Foundry", Structure, [4, 3, 0, 0, 0], [0; 5], E, 1).scaled(M, Structure));
-    v.push(c("Archive Vault", Structure, [2, 0, 3, 1, 0], [0; 5], S, 2).per_token(Token::Financier, 1));
-    v.push(c("Monument", Structure, [4, 0, 0, 3, 0], [0; 5], G, 6));
+        // Vehicles (9 designs, 31 cards).
+        c("Airborne Laboratory", Vehicle, [0, 3, 0, 0, 0], [0, 0, 1, 0, 1], S, 0).copies(3),
+        c("Aircraft Carrier", Vehicle, [3, 4, 0, 0, 0], [0; 5], M, 0).scaled(X, Vehicle).bonus(&[GENERAL, GENERAL]),
+        c("Icebreaker", Vehicle, [0, 3, 1, 0, 0], [0, 0, 0, 0, 2], X, 0).copies(4),
+        c("Juggernaut", Vehicle, [3, 3, 0, 0, 0], [0, 0, 0, 0, 2], M, 0).krystallium(1).bonus(&[GENERAL, GENERAL]).combo(Vehicle, 1),
+        c("Mega-Drill", Vehicle, [1, 2, 0, 0, 0], [1, 0, 0, 0, 1], M, 0).copies(4),
+        c("Saucer Squadron", Vehicle, [0, 3, 2, 0, 0], [0, 0, 0, 0, 3], S, 0).copies(2),
+        c("Submarine", Vehicle, [2, 3, 0, 0, 0], [0, 0, 0, 0, 2], M, 0).bonus(&[GENERAL]).copies(3),
+        c("Tank Division", Vehicle, [1, 2, 0, 0, 0], [0, 0, 0, 0, 1], M, 0).bonus(&[GENERAL]).copies(7),
+        c("Zeppelin", Vehicle, [0, 2, 0, 0, 0], [0, 0, 0, 0, 1], X, 0).copies(6),
 
-    // Vehicles: energy and exploration; they move things along.
-    v.push(c("Hover Cart", Vehicle, [1, 1, 0, 0, 0], [0, 1, 0, 0, 0], E, 1));
-    v.push(c("Rail Line", Vehicle, [2, 2, 0, 0, 0], [0, 0, 0, 0, 1], M, 1));
-    v.push(c("Skiff", Vehicle, [1, 0, 0, 0, 1], [0, 0, 0, 0, 1], X, 1));
-    v.push(c("Cargo Hauler", Vehicle, [2, 2, 0, 1, 0], [1, 0, 0, 1, 0], G, 1));
-    v.push(c("Starfreighter", Vehicle, [3, 3, 0, 2, 0], [0, 1, 0, 1, 1], E, 3));
-    v.push(c("Armored Convoy", Vehicle, [3, 1, 0, 0, 0], [0, 1, 0, 0, 0], M, 2).chars(1, 0));
-    v.push(c("Airship", Vehicle, [2, 2, 0, 0, 2], [0, 0, 0, 0, 2], X, 2));
-    v.push(c("Fleet Command", Vehicle, [3, 2, 0, 2, 0], [0; 5], E, 2).combo(Vehicle, 1));
-    v.push(c("Deep Diver", Vehicle, [2, 1, 1, 0, 2], [0, 0, 1, 0, 1], S, 3));
-    v.push(c("Tram Network", Vehicle, [4, 2, 0, 0, 0], [0; 5], M, 1).scaled(X, Vehicle));
-    v.push(c("Ion Courier", Vehicle, [1, 3, 1, 0, 0], [0, 2, 0, 0, 0], S, 1));
-    v.push(c("Caravan", Vehicle, [1, 1, 0, 1, 0], [0, 0, 0, 1, 0], G, 1));
-    v.push(c("Frontier Rover", Vehicle, [2, 1, 0, 0, 2], [0, 0, 0, 0, 2], X, 2).chars(0, 1));
-    v.push(c("Orbital Shuttle", Vehicle, [3, 4, 2, 0, 0], [0, 1, 0, 0, 0], E, 4));
-    v.push(c("Sky Armada", Vehicle, [4, 3, 0, 3, 0], [0; 5], E, 4).chars(1, 0).combo(Vehicle, 1));
+        // Research (23 designs, 23 cards).
+        c("Aquaculture", Research, [0, 0, 4, 2, 0], [0; 5], S, 0).bonus(&[FINANCIER]).per_token(Token::Financier, 1),
+        c("Bionic Grafts", Research, [0, 0, 5, 0, 0], [2, 0, 0, 0, 0], M, 4).bonus(&[GENERAL]),
+        c("Climate Control", Research, [0, 0, 5, 0, 0], [0, 2, 0, 1, 0], E, 2),
+        c("Cryopreservation", Research, [0, 0, 7, 0, 0], [0; 5], G, 0).bonus(&[FINANCIER]).per_token(Token::Financier, 1),
+        c("Genetic Upgrades", Research, [0, 0, 4, 0, 0], [0; 5], S, 3).bonus(&[FINANCIER, FINANCIER]),
+        c("Gravity Inverter", Research, [0, 1, 4, 0, 0], [0; 5], S, 0).krystallium(1).bonus(&[FINANCIER]).combo(Project, 2),
+        c("Human Cloning", Research, [0, 0, 2, 1, 0], [0, 0, 0, 1, 0], G, 1).bonus(&[FINANCIER]),
+        c("Mega-Bomb", Research, [0, 2, 2, 0, 0], [0; 5], E, 3).bonus(&[GENERAL, GENERAL]),
+        c("Neuroscience", Research, [0, 0, 3, 0, 0], [0; 5], S, 1).scaled(S, Research),
+        c("Quantum Generator", Research, [0, 0, 5, 0, 0], [0, 3, 0, 0, 0], E, 0).combo(Vehicle, 1),
+        c("Robot Assistants", Research, [0, 0, 3, 0, 0], [0; 5], M, 1).scaled(M, Structure),
+        c("Robotic Animals", Research, [0, 1, 2, 0, 0], [1, 0, 0, 0, 0], E, 2).bonus(&[GENERAL]),
+        c("Satellites", Research, [0, 2, 4, 0, 0], [0, 0, 0, 0, 2], X, 3).bonus(&[GENERAL]),
+        c("Security Automatons", Research, [0, 0, 4, 1, 0], [0; 5], G, 0).per_token(Token::General, 1),
+        c("Super-Soldiers", Research, [0, 0, 7, 0, 0], [0; 5], X, 0).bonus(&[GENERAL]).per_token(Token::General, 1),
+        c("Super-Sonar", Research, [0, 0, 4, 0, 0], [0; 5], X, 1).scaled(X, Vehicle),
+        c("Supercomputer", Research, [0, 0, 4, 0, 0], [0, 0, 1, 0, 0], S, 0).combo(Vehicle, 1),
+        c("Teleportation", Research, [0, 0, 8, 0, 0], [0; 5], X, 8).bonus(&[KRYSTALLIUM, KRYSTALLIUM]),
+        c("Time Travel", Research, [0, 0, 5, 0, 0], [0; 5], X, 15).krystallium(3),
+        c("Transmutation", Research, [0, 0, 3, 2, 0], [0, 0, 0, 3, 0], G, 1).bonus(&[KRYSTALLIUM]),
+        c("Universal Vaccine", Research, [0, 0, 3, 0, 0], [0; 5], G, 0).combo(Project, 1),
+        c("Unknown Technology", Research, [0, 0, 7, 0, 0], [0; 5], S, 0).krystallium(1).combo(Research, 3),
+        c("Virtual Reality", Research, [0, 0, 5, 0, 0], [0; 5], G, 2).scaled(G, Research),
 
-    // Research: science, and the points that come from knowing things.
-    v.push(c("Lab Bench", Research, [1, 0, 1, 0, 0], [0, 0, 1, 0, 0], S, 1));
-    v.push(c("Observatory", Research, [1, 1, 2, 0, 0], [0, 0, 2, 0, 0], S, 1));
-    v.push(c("Think Tank", Research, [0, 1, 3, 0, 0], [0, 0, 2, 0, 0], S, 2));
-    v.push(c("Particle Ring", Research, [2, 3, 2, 0, 0], [0, 1, 1, 0, 0], E, 2));
-    v.push(c("Library Annex", Research, [1, 0, 2, 1, 0], [0, 0, 1, 1, 0], G, 1));
-    v.push(c("Field Station", Research, [1, 0, 1, 0, 2], [0, 0, 1, 0, 1], X, 1));
-    v.push(c("Quantum Core", Research, [1, 2, 4, 0, 0], [0, 0, 3, 0, 0], S, 2));
-    v.push(c("Academy", Research, [2, 0, 3, 2, 0], [0; 5], G, 2).chars(0, 1).combo(Research, 1));
-    v.push(c("Genome Bank", Research, [0, 0, 4, 1, 0], [0; 5], S, 1).combo(Discovery, 2));
-    v.push(c("Material Lab", Research, [3, 0, 2, 0, 0], [1, 0, 1, 0, 0], M, 1));
-    v.push(c("Prototype Works", Research, [2, 1, 2, 0, 0], [0; 5], S, 1).scaled(S, Research));
-    v.push(c("Scholar Guild", Research, [0, 0, 3, 2, 0], [0, 0, 1, 0, 0], G, 2).chars(0, 1));
-    v.push(c("Fusion Study", Research, [1, 4, 3, 0, 0], [0, 2, 1, 0, 0], E, 2).bonus(Krystallium));
-    v.push(c("Grand Theory", Research, [0, 1, 5, 2, 0], [0; 5], S, 5));
-    v.push(c("Mind Engine", Research, [2, 2, 4, 0, 0], [0, 0, 1, 0, 0], S, 3).chars(1, 0).combo(Research, 1));
+        // Projects (20 designs, 29 cards).
+        c("Casino City", Project, [0, 3, 0, 4, 0], [0, 0, 0, 2, 0], G, 0).bonus(&[FINANCIER]).per_token(Token::Financier, 1).copies(2),
+        c("Espionage Agency", Project, [0, 2, 0, 2, 0], [0, 0, 0, 0, 2], X, 1).copies(2),
+        c("Giant Dam", Project, [3, 0, 0, 2, 0], [0, 4, 0, 0, 0], E, 1),
+        c("Giant Tower", Project, [2, 0, 0, 3, 0], [0; 5], G, 10).chars(0, 1),
+        c("Harbor Zone", Project, [0, 0, 0, 5, 0], [2, 0, 0, 2, 0], G, 2).bonus(&[FINANCIER, FINANCIER]).copies(2),
+        c("Lunar Base", Project, [0, 2, 2, 2, 0], [0; 5], X, 10).krystallium(1).bonus(&[GENERAL, GENERAL]),
+        c("Magnetic Train", Project, [0, 1, 1, 3, 0], [0; 5], G, 2).scaled(G, Structure).bonus(&[FINANCIER, FINANCIER]),
+        c("Museum", Project, [0, 0, 0, 3, 0], [0; 5], X, 0).combo(Discovery, 2).copies(2),
+        c("National Monument", Project, [5, 0, 0, 3, 0], [0; 5], G, 0).combo(Project, 2),
+        c("Polar Base", Project, [0, 3, 0, 4, 0], [0, 0, 0, 0, 3], X, 0).bonus(&[GENERAL]).combo(Discovery, 2),
+        c("Propaganda Center", Project, [0, 0, 0, 3, 0], [0; 5], G, 1).scaled(G, Project).bonus(&[GENERAL]).copies(2),
+        c("Secret Laboratory", Project, [2, 0, 0, 3, 0], [0, 0, 2, 0, 0], S, 0).bonus(&[KRYSTALLIUM]).combo(Research, 1).copies(2),
+        c("Secret Society", Project, [0, 0, 0, 3, 0], [0; 5], G, 0).krystallium(1).per_token(Token::Financier, 1).copies(2),
+        c("Solar Cannon", Project, [0, 2, 1, 3, 0], [0; 5], E, 0).bonus(&[GENERAL]).per_token(Token::General, 1),
+        c("Space Elevator", Project, [0, 3, 1, 2, 0], [0; 5], E, 0).bonus(&[FINANCIER]).per_token(Token::Financier, 1),
+        c("Underground City", Project, [3, 0, 0, 3, 0], [2, 2, 0, 0, 0], E, 3).bonus(&[KRYSTALLIUM]).copies(2),
+        c("Underwater City", Project, [0, 2, 1, 2, 0], [0, 0, 1, 0, 2], X, 3).copies(2),
+        c("Universal Exposition", Project, [0, 0, 0, 3, 0], [0; 5], G, 0).chars(0, 2).combo(Research, 3),
+        c("University", Project, [0, 0, 1, 2, 0], [0; 5], S, 2).scaled(S, Project),
+        c("World Congress", Project, [0, 0, 0, 6, 0], [0; 5], G, 0).chars(0, 2).combo(Project, 3),
 
-    // Projects: little production, lots of points.
-    v.push(c("Aqueduct", Project, [2, 0, 0, 1, 0], [1, 0, 0, 0, 0], M, 2));
-    v.push(c("Opera House", Project, [1, 0, 1, 3, 0], [0; 5], G, 4));
-    v.push(c("Sky Garden", Project, [2, 1, 1, 1, 0], [0, 0, 0, 1, 0], S, 3));
-    v.push(c("Peace Treaty", Project, [0, 0, 2, 2, 0], [0; 5], S, 4).chars(1, 1));
-    v.push(c("Grand Canal", Project, [4, 1, 0, 1, 1], [1, 0, 0, 0, 0], M, 5));
-    v.push(c("World Fair", Project, [1, 1, 1, 2, 1], [0; 5], X, 3).combo(Discovery, 1));
-    v.push(c("Trade Pact", Project, [0, 0, 1, 3, 0], [0; 5], G, 2).chars(0, 1).per_token(Token::Financier, 1));
-    v.push(c("Defense Grid", Project, [2, 2, 0, 0, 0], [0; 5], E, 3).chars(2, 0).per_token(Token::General, 1));
-    v.push(c("Cultural Wave", Project, [0, 0, 2, 2, 2], [0; 5], X, 3).combo(Structure, 1));
-    v.push(c("Megacity", Project, [5, 2, 1, 3, 0], [0; 5], M, 8));
-    v.push(c("Space Elevator", Project, [3, 3, 2, 0, 3], [0, 0, 0, 0, 1], E, 7));
-    v.push(c("Founding Charter", Project, [1, 1, 1, 1, 1], [0; 5], G, 3).bonus(general));
-    v.push(c("Utopia Plan", Project, [3, 2, 3, 3, 2], [0; 5], S, 10));
-    v.push(c("Global Network", Project, [2, 2, 2, 2, 0], [0; 5], E, 2).combo(Vehicle, 1));
-    v.push(c("Legacy Hall", Project, [2, 0, 2, 2, 0], [0; 5], G, 2).combo(Project, 2));
-
-    // Discoveries: exploration, characters and surprises.
-    v.push(c("Lost Ruins", Discovery, [0, 0, 0, 0, 2], [0, 0, 0, 0, 1], X, 1));
-    v.push(c("Spice Route", Discovery, [0, 0, 0, 1, 2], [0, 0, 0, 1, 1], G, 1));
-    v.push(c("Crystal Cave", Discovery, [0, 0, 1, 0, 3], [0, 0, 0, 0, 1], X, 1).bonus(Krystallium));
-    v.push(c("Sunken Temple", Discovery, [1, 0, 2, 0, 3], [0; 5], S, 4));
-    v.push(c("Alien Relic", Discovery, [0, 1, 3, 0, 2], [0, 0, 1, 0, 1], S, 3));
-    v.push(c("Jungle Outpost", Discovery, [1, 0, 0, 0, 2], [1, 0, 0, 0, 1], M, 1));
-    v.push(c("Polar Station", Discovery, [1, 2, 1, 0, 2], [0, 1, 0, 0, 1], E, 2).chars(1, 0));
-    v.push(c("Cartographers' Guild", Discovery, [0, 0, 1, 1, 3], [0; 5], X, 2).chars(0, 1).combo(Discovery, 1));
-    v.push(c("Meteor Mine", Discovery, [2, 1, 0, 0, 3], [2, 0, 0, 0, 0], M, 2).bonus(Cube(M)));
-    v.push(c("Star Map", Discovery, [0, 0, 2, 0, 2], [0, 0, 0, 0, 2], X, 1));
-    v.push(c("Lunar Colony", Discovery, [3, 2, 1, 0, 4], [0, 0, 0, 1, 0], M, 5).chars(1, 0));
-    v.push(c("Ancient Archive", Discovery, [0, 0, 3, 0, 3], [0, 0, 1, 0, 0], S, 2).bonus(financier));
-    v.push(c("Gold Rush", Discovery, [0, 1, 0, 1, 3], [0, 0, 0, 2, 0], G, 1));
-    v.push(c("Frontier Beacon", Discovery, [1, 1, 1, 1, 3], [0; 5], X, 3).scaled(X, Discovery));
-    v.push(c("First Contact", Discovery, [0, 2, 3, 1, 4], [0; 5], X, 6).chars(0, 1));
-
+        // Discoveries (17 designs, 17 cards).
+        c("Alexander's Tomb", Discovery, [0, 0, 0, 0, 7], [0; 5], G, 10).bonus(&[GENERAL, GENERAL]),
+        c("Ancient Astronauts", Discovery, [0, 0, 0, 0, 6], [0; 5], S, 10).chars(1, 0).scaled(S, Discovery).bonus(&[KRYSTALLIUM, KRYSTALLIUM]),
+        c("Ark of the Covenant", Discovery, [0, 0, 0, 0, 4], [0; 5], X, 5).bonus(&[KRYSTALLIUM]),
+        c("Atlantis", Discovery, [0, 0, 0, 0, 7], [0; 5], G, 0).krystallium(1).per_token(Token::General, 2),
+        c("Bermuda Triangle", Discovery, [0, 0, 0, 0, 4], [0, 0, 1, 0, 0], S, 4).bonus(&[KRYSTALLIUM]),
+        c("Blackbeard's Treasure", Discovery, [0, 0, 0, 0, 3], [0, 0, 0, 1, 1], G, 2),
+        c("Center of the Earth", Discovery, [0, 0, 0, 0, 5], [0; 5], X, 15).chars(2, 0),
+        c("Cities of Gold", Discovery, [0, 0, 0, 0, 4], [0, 0, 0, 3, 0], G, 3),
+        c("City of Agartha", Discovery, [0, 0, 0, 0, 4], [0, 0, 0, 0, 2], X, 0).krystallium(1).per_token(Token::General, 1),
+        c("Fountain of Youth", Discovery, [0, 0, 0, 0, 7], [0; 5], E, 0).bonus(&[KRYSTALLIUM, KRYSTALLIUM, KRYSTALLIUM]).per_token(Token::General, 1),
+        c("Gardens of the Hesperides", Discovery, [0, 0, 0, 0, 5], [0; 5], X, 0).combo(Project, 2),
+        c("Island of Avalon", Discovery, [0, 0, 0, 0, 5], [0, 0, 1, 0, 0], S, 7),
+        c("King Solomon's Mines", Discovery, [0, 0, 0, 0, 4], [0; 5], G, 2).scaled(G, Structure),
+        c("Lost Continent of Mu", Discovery, [0, 0, 0, 0, 6], [0, 0, 0, 1, 0], G, 0).bonus(&[KRYSTALLIUM, KRYSTALLIUM]).combo(Discovery, 2),
+        c("Parallel Dimension", Discovery, [0, 0, 3, 0, 4], [0; 5], X, 0).chars(1, 0).bonus(&[KRYSTALLIUM, KRYSTALLIUM, KRYSTALLIUM]).combo(Research, 3),
+        c("Roswell", Discovery, [0, 0, 0, 0, 6], [0, 0, 1, 0, 0], S, 0).bonus(&[GENERAL]).per_token(Token::General, 1),
+        c("Treasure of the Templars", Discovery, [0, 0, 0, 0, 5], [0, 0, 0, 2, 0], G, 3).bonus(&[KRYSTALLIUM, KRYSTALLIUM]),
+    ];
     debug_assert_eq!(v.len(), DESIGNS);
+    debug_assert_eq!(v.iter().map(|c| c.copies as usize).sum::<usize>(), DECK_SIZE);
     v
 }

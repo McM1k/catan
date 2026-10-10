@@ -98,7 +98,6 @@ fn held_cube(held: Held) -> AnyView {
 
 fn bonus_cube(bonus: Bonus) -> AnyView {
     match bonus {
-        Bonus::Cube(res) => res_cube(res),
         Bonus::Krystallium => cube("krystallium", "K"),
         Bonus::Token(Token::General) => cube("general", "Gen"),
         Bonus::Token(Token::Financier) => cube("financier", "Fin"),
@@ -208,13 +207,13 @@ fn worth_row(card: &'static Card) -> Option<AnyView> {
 }
 
 fn built_row(card: &'static Card) -> Option<AnyView> {
-    let bonus = card.bonus?;
-    let text = look::bonus_text(card).unwrap_or_default();
+    let text = look::bonus_text(card)?;
+    let cubes = card.bonus.iter().map(|&bonus| bonus_cube(bonus)).collect_view();
     Some(row(
         "built",
         "When built",
         view! {
-            {bonus_cube(bonus)}
+            {cubes}
             <span class="bonus-text">{text}</span>
         }
         .into_any(),
@@ -815,6 +814,7 @@ fn empire_panel(ctx: &Ctx) -> AnyView {
                 <div>
                     <h2>"Your Empire"</h2>
                     <p class="empire-name">{look::empire_name(ctx.view.you)}</p>
+                    <p class="empire-points">{look::empire_points(ctx.view.you)}</p>
                 </div>
                 {points(me)}
             </div>
@@ -884,7 +884,7 @@ fn rival(ctx: &Ctx, seat: usize) -> AnyView {
                         {ctx.name(seat)}
                         {offline.then(|| view! { <span class="tag tag-off">"offline"</span> })}
                     </h3>
-                    <p class="empire-name">{look::empire_name(seat)}</p>
+                    <p class="empire-name" title=look::empire_points(seat)>{look::empire_name(seat)}</p>
                 </div>
                 {points(p)}
             </div>
@@ -982,7 +982,12 @@ fn cube_picker(ctx: &Ctx) -> AnyView {
                     <div class="modal panel" role="dialog" aria-modal="true" aria-labelledby="cube-picker-title">
                         <h2 id="cube-picker-title">{title}</h2>
                         <p class="modal-text">
-                            "It gives you a cube: " {res_cube(res)} {format!(" {}. Where does it go?", res.name())}
+                            "It gives you a cube: " {res_cube(res)}
+                            {if scrapping {
+                                format!(" {}, which goes on your Empire.", res.name())
+                            } else {
+                                format!(" {}. Where does it go?", res.name())
+                            }}
                         </p>
                         {scrapping
                             .then(|| view! { <p class="warning">"Everything placed on this building is lost."</p> })}
@@ -1297,24 +1302,26 @@ mod tests {
     #[test]
     fn production_shows_the_step_the_race_and_what_to_place() {
         let mut state = production_state();
-        // Seat 2 (Solar Concord) also makes a Materials cube at the start of
-        // the game: take it away, so that seat 0 is alone in front.
-        state.players[2].produced = 0;
-        state.players[2].pool = 0;
-        state.players[2].ready = true;
+        // Seats 1 and 2 also make Materials at the start of the game: take
+        // them away, so that seat 0 is alone in front.
+        for seat in [1, 2] {
+            state.players[seat].produced = 0;
+            state.players[seat].pool = 0;
+            state.players[seat].ready = true;
+        }
         let html = render(&state, 0);
         assert!(html.contains("Production: Materials"));
         for step in ["Materials", "Energy", "Science", "Gold", "Exploration", "Wrap-up"] {
             assert!(html.contains(step), "{step}");
         }
         assert!(html.contains("step now") && html.contains("aria-current=\"step\""));
-        // Seat 0 (Aurelian Union) makes a Materials cube and nobody else does:
-        // it leads the race and takes a General.
-        // (The log below says "...tied: nobody takes a General" for earlier
+        // Seat 0 (Noram States) makes three Materials cubes and nobody else
+        // does: it leads the race and takes a Financier.
+        // (The log may say "...tied: nobody takes a Financier" for earlier
         // races, so the prize is looked for in the race itself.)
         assert!(html.contains("Materials produced") && html.contains("race-row lead"));
-        assert!(html.contains("class=\"race-prize\">takes a General<"));
-        assert!(html.contains("Put on your Empire") && html.contains("Done: drop 1 cube"));
+        assert!(html.contains("class=\"race-prize\">takes a Financier<"));
+        assert!(html.contains("Put on your Empire") && html.contains("Done: drop 3 cubes"));
         assert!(html.contains("piece selected"), "the first piece is the one used");
         assert!(html.contains("Materials cube"));
         assert!(!html.contains("tied: no character"));
@@ -1335,7 +1342,7 @@ mod tests {
     fn free_spaces_light_up_for_what_you_hold() {
         let mut state = production_state();
         // Give seat 0 a building that wants Energy and Gold, and some pieces.
-        let card = id("Smelter"); // 3 Materials, 1 Energy
+        let card = id("Industrial Complex"); // 3 Materials, 1 Energy
         state.players[0].buildings = vec![wonderful_core::Building { card, filled: Cost::default() }];
         state.players[0].pool = 2;
         state.players[0].ready = false;
@@ -1364,14 +1371,13 @@ mod tests {
     #[test]
     fn a_character_space_takes_a_character_and_the_science_winner_chooses() {
         let mut state = production_state();
-        let card = id("Bastion"); // 3 Materials, 1 General
+        let card = id("Giant Tower"); // 2 Materials, 3 Gold, 1 Financier
         state.players[0].buildings = vec![wonderful_core::Building { card, filled: Cost::default() }];
-        state.players[0].generals = 1;
+        state.players[0].financiers = 1;
         state.players[0].pool = 0;
         state.players[0].ready = true;
         let html = render(&state, 0);
-        assert!(html.contains("socket free general fits"), "{html}");
-        assert!(html.contains("1 General") || html.contains("General"));
+        assert!(html.contains("socket free financier fits"), "{html}");
 
         state.players[0].choose = true;
         state.players[0].ready = false;
@@ -1409,7 +1415,7 @@ mod tests {
         assert!(html.contains("your Empire") && html.contains("0 of 5 cubes"));
         assert!(html.contains("Cancel") && !html.contains("is lost"));
 
-        // Scrapping warns about what is lost and doesn't offer the building itself.
+        // Scrapping warns about what is lost and only confirms: the cube goes to the Empire.
         let html = in_owner(|| {
             let app = App::new();
             app.wonderful.cube_from.set(Some(CubeFrom::Scrap(built)));
@@ -1417,6 +1423,7 @@ mod tests {
         });
         assert!(html.contains("Everything placed on this building is lost."));
         assert!(html.contains(&format!("Scrap {}", built.def().name)));
+        assert!(html.contains("which goes on your Empire"));
         assert_eq!(html.matches("target-detail").count(), 1, "only the Empire");
 
         // A choice that no longer applies (the card is gone) shows nothing.
@@ -1431,8 +1438,8 @@ mod tests {
     #[test]
     fn the_other_players_show_what_they_have_built() {
         let mut state = State::new(4, 12);
-        state.players[2].empire = vec![id("Quarry"), id("Skiff")];
-        state.players[2].buildings = vec![wonderful_core::Building { card: id("Bastion"), filled: Cost::default() }];
+        state.players[2].empire = vec![id("Recycling Plant"), id("Zeppelin")];
+        state.players[2].buildings = vec![wonderful_core::Building { card: id("Juggernaut"), filled: Cost::default() }];
         state.players[2].krystallium = 2;
         let html = in_owner(|| {
             let n = state.seats();
@@ -1448,22 +1455,22 @@ mod tests {
         assert_eq!(html.matches("class=\"rival\"").count(), 3);
         assert!(html.contains("Cy") && html.contains("tag tag-off"), "Cy is offline");
         assert_eq!(html.matches("tag tag-off").count(), 1);
-        assert!(html.contains("Quarry") && html.contains("Skiff") && html.contains("Bastion"));
-        assert!(html.contains("0/4"), "progress of the Bastion");
+        assert!(html.contains("Recycling Plant") && html.contains("Zeppelin") && html.contains("Juggernaut"));
+        assert!(html.contains("0/7"), "progress of the Juggernaut");
         assert!(html.contains("deciding"));
     }
 
     #[test]
     fn nothing_of_the_others_hands_is_drawn() {
         let mut state = State::new(3, 12);
-        state.players[0].hand = vec![id("Lab Bench"), id("Lost Ruins")];
-        state.players[1].hand = vec![id("Utopia Plan"), id("Archive Vault")];
-        state.players[2].hand = vec![id("Monument"), id("Skiff")];
-        state.players[1].picked = Some(id("Bazaar"));
-        state.players[1].drafted = vec![id("Caravan")];
+        state.players[0].hand = vec![id("Neuroscience"), id("Atlantis")];
+        state.players[1].hand = vec![id("Time Travel"), id("Aquaculture")];
+        state.players[2].hand = vec![id("Museum"), id("Zeppelin")];
+        state.players[1].picked = Some(id("Casino City"));
+        state.players[1].drafted = vec![id("Roswell")];
         let html = render(&state, 0);
-        assert!(html.contains("Lab Bench") && html.contains("Lost Ruins"));
-        for hidden in ["Utopia Plan", "Archive Vault", "Monument", "Skiff", "Bazaar", "Caravan"] {
+        assert!(html.contains("Neuroscience") && html.contains("Atlantis"));
+        for hidden in ["Time Travel", "Aquaculture", "Museum", "Zeppelin", "Casino City", "Roswell"] {
             assert!(!html.contains(hidden), "{hidden} leaked");
         }
     }
@@ -1471,9 +1478,10 @@ mod tests {
     #[test]
     fn the_empire_groups_finished_cards_by_type() {
         let mut state = State::new(3, 12);
-        state.players[0].empire = vec![id("Quarry"), id("Smelter"), id("Skiff"), id("Monument"), id("Lab Bench")];
+        state.players[0].empire =
+            vec![id("Recycling Plant"), id("Nuclear Plant"), id("Zeppelin"), id("Wind Turbines"), id("Neuroscience")];
         let html = render(&state, 0);
-        assert!(html.contains("Your Empire") && html.contains("Aurelian Union"));
+        assert!(html.contains("Your Empire") && html.contains("Noram States") && html.contains("1 VP per Financier"));
         assert_eq!(html.matches("class=\"kind-col\"").count(), 3, "Structure, Vehicle and Research");
         assert!(html.contains("Produces each round") && html.contains("You hold"));
         assert!(!html.contains("No finished cards yet."));
@@ -1488,12 +1496,12 @@ mod tests {
         assert!(fresh.contains("Round 1 of 4 begins."));
         state.log = vec![
             wonderful_core::Event::RoundStarted(1),
-            wonderful_core::Event::Completed { seat: 1, card: id("Quarry") },
+            wonderful_core::Event::Completed { seat: 1, card: id("Zeppelin") },
             wonderful_core::Event::Supremacy { res: Res::Gold, seat: Some(0) },
         ];
         let html = render(&state, 0);
         let newest = html.find("You produced the most Gold").unwrap();
-        let older = html.find("Bob finished Quarry.").unwrap();
+        let older = html.find("Bob finished Zeppelin.").unwrap();
         assert!(newest < older);
         // Only the latest twelve lines are listed.
         state.log = (0..24).map(|_| wonderful_core::Event::RoundStarted(1)).collect();

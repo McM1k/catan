@@ -6,9 +6,8 @@
 //! Four rounds, all players acting at the same time. See [`state`] for the
 //! rules in full.
 //!
-//! **The cards are an original placeholder set** (see [`cards`]): the game
-//! works end to end, but the catalogue is not the published one. It is a
-//! single table, so swapping in other cards doesn't touch the rules.
+//! The cards and Empires are the published base game's (see [`cards`]),
+//! played on side A of the Empires.
 
 pub mod cards;
 pub mod state;
