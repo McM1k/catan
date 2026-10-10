@@ -37,7 +37,8 @@ cargo run -p server --release                  # http://localhost:3000
 
 Open the page in several browser windows (or on several machines), pick a game, create
 a room in one and join with the 4-letter code in the others. Refreshing the page puts
-you back in your seat automatically (a token is kept in `localStorage`).
+you back in your seat automatically (a token is kept in the tab's `sessionStorage`, so
+two tabs of one browser are two players).
 
 Env vars: `PORT` (default 3000), `STATIC_DIR` (default `client/dist`).
 
@@ -76,9 +77,10 @@ the game. It now runs on the room system Catan already had:
 * **Host.** The first seat is the host. Only the host starts the game, and in Hanabi
   only the host picks the variant rules (everyone sees them, locked, as they change).
   It's a Wonderful World has no options: the host just starts.
-* **Seats and reconnecting.** Every seat has a token kept in the browser. If the
+* **Seats and reconnecting.** Every seat has a token kept in the browser tab. If the
   connection drops during a game the seat stays yours, shown as "offline" to the
-  others, and a refresh or a reconnect takes it back. In a lobby, leaving frees the seat.
+  others, and a refresh or a reconnect takes it back. In a lobby, leaving frees the seat;
+  a dropped connection (a reload, a phone switching apps) keeps it for 2 minutes first.
 * **Names** are trimmed, at most 20 characters, and unique in a room (ignoring case).
 * **Limits.** Catan 2–4 players, Hanabi 2–5, It's a Wonderful World 2–5. Joining a running game is refused
   unless you hold its token. A room nobody has connected to for 30 minutes is removed.
@@ -110,8 +112,9 @@ cargo test --workspace
 * `protocol` (7): every message survives JSON, including the Hanabi and Wonderful views
   (the Hanabi maps are keyed by seat and color), and rule payloads from before "hanabii"
   existed still parse.
-* `server` (31): the room flows for all three games, host-only start and rules, seat order,
-  fullness, reconnecting with a token, stale disconnects, moves for the wrong game, a
+* `server` (34): the room flows for all three games, host-only start and rules, seat order,
+  fullness, reconnecting with a token, stale disconnects, lobby seats kept through a short
+  drop, moves for the wrong game, a
   whole Hanabi game and a whole Wonderful game to their end, every seat's own hand (and
   nobody else's) in Wonderful, and the Hanabi rule tests that used to live in the old
   server (hanabii locks the other options, rules freeze once the game starts, …).
