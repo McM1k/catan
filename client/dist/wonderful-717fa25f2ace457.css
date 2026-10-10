@@ -1,0 +1,1485 @@
+/* It's a Wonderful World. Everything is scoped under .wonderful, so it can't
+   leak into the other games (which reuse names like .card, .panel and .hint),
+   and the custom properties live on .wonderful too.
+
+   The idea: a card table. Pale card stock on deep green felt, and glossy
+   cubes as the only saturated things on the page. Each card's cost is a row
+   of sockets that light up when what you hold fits them. */
+
+.wonderful {
+  --felt: #0b2a2a;
+  --felt-2: #103535;
+  --felt-3: #174343;
+  --line: #2b6666;
+  --pearl: #eef1ea;
+  --pearl-dim: #c9d2c7;
+  --card-ink: #12231f;
+  --card-soft: #46605a;
+  --text: #e7f0eb;
+  --muted: #93b4ab;
+  --pop: #ff6b8b;
+  --pop-hi: #ff89a3;
+  --pop-ink: #2b0c16;
+
+  /* card types */
+  --structure: #4f6788;
+  --vehicle: #b83a52;
+  --research: #237a5a;
+  --project: #6f4fbd;
+  --discovery: #946a12;
+
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(120% 70% at 50% -15%, #16524e 0%, rgba(22, 82, 78, 0) 62%),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.013) 0 2px, transparent 2px 5px),
+    var(--felt);
+  color: var(--text);
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.wonderful,
+.wonderful * {
+  box-sizing: border-box;
+}
+
+.wonderful .app {
+  max-width: 1260px;
+  margin: 0 auto;
+  padding: 1rem 1rem 5rem;
+}
+
+.wonderful h1,
+.wonderful h2,
+.wonderful h3 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  margin: 0;
+}
+
+.wonderful h2 {
+  font-size: 1.3rem;
+  margin-bottom: 0.7rem;
+}
+
+.wonderful h3 {
+  font-size: 1.02rem;
+}
+
+.wonderful p {
+  margin: 0;
+}
+
+.wonderful ul,
+.wonderful ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wonderful .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.wonderful .hint,
+.wonderful .empty,
+.wonderful .note,
+.wonderful .caption {
+  color: var(--muted);
+}
+
+.wonderful .empty,
+.wonderful .note {
+  font-size: 0.9rem;
+}
+
+.wonderful .caption {
+  font-size: 0.85rem;
+  margin: 0 0 0.4rem;
+}
+
+/* ---------- buttons and fields: the plain ones. :where() keeps their
+   specificity at zero, so every special button below simply wins. ---------- */
+
+.wonderful :where(button) {
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--felt-3);
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.wonderful :where(button:hover:not(:disabled)) {
+  border-color: var(--pearl);
+}
+
+.wonderful :where(button:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wonderful :where(button.primary) {
+  background: var(--pop);
+  border-color: var(--pop);
+  color: var(--pop-ink);
+}
+
+.wonderful :where(button.primary:hover:not(:disabled)) {
+  background: var(--pop-hi);
+  border-color: var(--pop-hi);
+}
+
+.wonderful :where(button.link) {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: underline;
+  padding: 0.25rem;
+}
+
+.wonderful :where(button.link:hover:not(:disabled)) {
+  color: var(--text);
+}
+
+.wonderful :focus-visible {
+  outline: 3px solid var(--pearl);
+  outline-offset: 2px;
+}
+
+.wonderful :where(input) {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.6rem 0.75rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--felt);
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+}
+
+.wonderful .code-input {
+  text-align: center;
+  font-size: 1.5rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+}
+
+.wonderful .tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--felt-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.wonderful .tag-off {
+  color: #ffd2d9;
+  background: #5a2430;
+  border-color: #8a3a4a;
+}
+
+.wonderful .tag-win {
+  color: var(--pop-ink);
+  background: var(--pop);
+  border-color: var(--pop);
+}
+
+/* ---------- panels ---------- */
+
+.wonderful .panel {
+  background: var(--felt-2);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 1rem 1.1rem;
+}
+
+/* The three phase areas are the table itself: the cards sit straight on the felt. */
+.wonderful .panel.draft,
+.wonderful .panel.planning,
+.wonderful .panel.production {
+  background: none;
+  border: none;
+  padding: 0.2rem 0;
+}
+
+.wonderful .subhead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.1rem 0 0.6rem;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.wonderful .subhead .count {
+  margin-left: auto;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.wonderful .panel-actions {
+  margin-top: 1rem;
+}
+
+/* ---------- the entry screens ---------- */
+
+.wonderful .entry {
+  max-width: 27rem;
+  margin: 5vh auto 0;
+  text-align: center;
+}
+
+.wonderful .mark {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.wonderful .mark .cube {
+  width: 2.3rem;
+  height: 2.3rem;
+  font-size: 1rem;
+  border-radius: 0.6rem;
+}
+
+.wonderful .mark .cube:nth-child(odd) {
+  transform: translateY(0.25rem) rotate(-4deg);
+}
+
+.wonderful .mark .cube:nth-child(even) {
+  transform: translateY(-0.2rem) rotate(3deg);
+}
+
+.wonderful .game-title {
+  font-size: clamp(2rem, 7vw, 2.9rem);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+}
+
+.wonderful .lede {
+  max-width: 34ch;
+  margin: 0.8rem auto 1.4rem;
+  color: var(--muted);
+}
+
+/* The waiting room has no lede: keep the panel clear of the title. */
+.wonderful .game-title + .panel {
+  margin-top: 1.4rem;
+}
+
+.wonderful .entry .panel {
+  text-align: left;
+}
+
+.wonderful .join-form label {
+  display: block;
+  margin-bottom: 0.9rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.wonderful .join-form button,
+.wonderful .entry .panel > button {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.wonderful .join-form button.link,
+.wonderful .entry .panel > button.link {
+  width: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.wonderful .join-form .hint {
+  margin: 1rem 0 0.6rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.wonderful .room-code {
+  margin: 0.2rem 0 1rem;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 3.2rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-align: center;
+  color: var(--pop);
+}
+
+.wonderful .roster {
+  margin: 0 0 1rem;
+}
+
+.wonderful .roster li {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.wonderful .entry .hint {
+  margin-bottom: 0.4rem;
+}
+
+.wonderful .entry .panel > button + .hint {
+  margin-top: 0.6rem;
+}
+
+/* ---------- tokens: cubes, characters, Krystallium ---------- */
+
+.wonderful .res-materials {
+  --c: #9aa5b1;
+  --hi: #d6dde3;
+  --lo: #66727e;
+  --on: #0f1b19;
+}
+
+.wonderful .res-energy {
+  --c: #e5533d;
+  --hi: #f58a76;
+  --lo: #a8301f;
+  --on: #1d0905;
+}
+
+.wonderful .res-science {
+  --c: #3fb86e;
+  --hi: #86dea6;
+  --lo: #23814a;
+  --on: #04200f;
+}
+
+.wonderful .res-gold {
+  --c: #f2c230;
+  --hi: #fbe38a;
+  --lo: #b88e0d;
+  --on: #2a2000;
+}
+
+.wonderful .res-exploration {
+  --c: #3b82e0;
+  --hi: #8cb8f2;
+  --lo: #2255a3;
+  --on: #04132b;
+}
+
+.wonderful .general {
+  --c: #b4547a;
+  --hi: #d98aa9;
+  --lo: #7d2f52;
+  --on: #fff;
+}
+
+.wonderful .financier {
+  --c: #2aa6b8;
+  --hi: #7fd6e3;
+  --lo: #17707e;
+  --on: #02222a;
+}
+
+.wonderful .wrap {
+  --c: #c9d2c7;
+  --hi: #f4f7f2;
+  --lo: #8d9a91;
+  --on: #12231f;
+}
+
+.wonderful .cube,
+.wonderful .socket.req,
+.wonderful .socket.filled {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--on, #0f1b19);
+  background: linear-gradient(155deg, var(--hi, #d6dde3) 0%, var(--c, #9aa5b1) 48%, var(--lo, #66727e) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.wonderful .cube.general,
+.wonderful .cube.financier,
+.wonderful .socket.general,
+.wonderful .socket.financier {
+  font-size: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.wonderful .cube.general,
+.wonderful .socket.general {
+  border-radius: 0.4rem 0.4rem 55% 55%;
+}
+
+.wonderful .cube.financier,
+.wonderful .socket.financier {
+  border-radius: 50%;
+}
+
+.wonderful .cube.krystallium,
+.wonderful .socket.krystallium {
+  --on: #10202a;
+  background: conic-gradient(from 210deg, #8cf3ff, #b99cff, #ff9ee0, #ffe08a, #8cf3ff);
+}
+
+/* ---------- the top of the screen ---------- */
+
+.wonderful .top-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.25rem;
+  padding: 0.2rem 0 0.9rem;
+}
+
+.wonderful .brand {
+  font-size: 1.3rem;
+  letter-spacing: -0.005em;
+}
+
+.wonderful .room {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.wonderful .room-tag {
+  margin-left: 0.2rem;
+  color: var(--text);
+  font-size: 1rem;
+  letter-spacing: 0.18em;
+}
+
+.wonderful .top-bar .link {
+  margin-left: auto;
+}
+
+.wonderful .status {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem 1.4rem;
+  margin-bottom: 1.1rem;
+  padding: 0.2rem 0 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.wonderful .round {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "word word" "num of";
+  align-items: baseline;
+  column-gap: 0.4rem;
+}
+
+.wonderful .round-word {
+  grid-area: word;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.wonderful .round-num {
+  grid-area: num;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 3.4rem;
+  font-weight: 600;
+  line-height: 0.9;
+}
+
+.wonderful .round-of {
+  grid-area: of;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.wonderful .phase h2 {
+  margin-bottom: 0.2rem;
+}
+
+.wonderful .phase .hint {
+  max-width: 62ch;
+  color: var(--text);
+  opacity: 0.86;
+}
+
+.wonderful .seats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem 0.5rem;
+  max-width: 22rem;
+}
+
+.wonderful .seat {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.65rem 0.2rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: var(--felt-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.wonderful .seat .dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+
+.wonderful .seat.done {
+  color: var(--text);
+}
+
+.wonderful .seat.done .dot {
+  background: #6fe3a4;
+  border-color: #6fe3a4;
+}
+
+/* ---------- the layout ---------- */
+
+.wonderful .board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20.5rem;
+  gap: 1.4rem;
+  align-items: start;
+}
+
+.wonderful .main-col,
+.wonderful .side-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* ---------- cards ---------- */
+
+.wonderful .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.6rem, 1fr));
+  gap: 0.85rem;
+}
+
+.wonderful .cards.kept,
+.wonderful .cards.finished {
+  grid-template-columns: repeat(auto-fill, minmax(8.6rem, 1fr));
+  gap: 0.6rem;
+}
+
+.wonderful .card {
+  --band: var(--structure);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+  height: 100%;
+  padding: 0 0 0.6rem;
+  overflow: hidden;
+  text-align: left;
+  color: var(--card-ink);
+  background: var(--pearl);
+  border-radius: 0.8rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 7px 16px rgba(0, 0, 0, 0.32),
+    0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.wonderful .kind-structure {
+  --band: var(--structure);
+}
+
+.wonderful .kind-vehicle {
+  --band: var(--vehicle);
+}
+
+.wonderful .kind-research {
+  --band: var(--research);
+}
+
+.wonderful .kind-project {
+  --band: var(--project);
+}
+
+.wonderful .kind-discovery {
+  --band: var(--discovery);
+}
+
+.wonderful .card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--band);
+}
+
+.wonderful .kind-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+}
+
+.wonderful .card-name {
+  display: block;
+  padding: 0.05rem 0.7rem 0;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.wonderful .card-cost {
+  display: block;
+  padding: 0 0.7rem;
+}
+
+.wonderful .sockets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.wonderful .card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  padding: 0.1rem 0.7rem 0;
+}
+
+.wonderful .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.wonderful .row-label {
+  min-width: 3.6rem;
+  font-size: 0.72rem;
+  color: var(--card-soft);
+}
+
+.wonderful .row-body {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.25rem;
+}
+
+.wonderful .card .cube {
+  width: 1.2rem;
+  height: 1.2rem;
+  font-size: 0.62rem;
+  border-radius: 0.34rem;
+}
+
+.wonderful .card .cube.general,
+.wonderful .card .cube.financier {
+  font-size: 0.42rem;
+}
+
+.wonderful .per {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.wonderful .per-text,
+.wonderful .bonus-text {
+  font-size: 0.78rem;
+}
+
+.wonderful .vp {
+  font-weight: 700;
+}
+
+.wonderful .card-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: auto 0.7rem 0;
+  padding-top: 0.4rem;
+  border-top: 1px dashed rgba(18, 35, 31, 0.25);
+}
+
+/* The cost: requirements are solid cubes, empty spaces of a building are holes. */
+.wonderful .socket {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border-radius: 0.45rem;
+}
+
+.wonderful .socket.req {
+  width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.68rem;
+}
+
+.wonderful .socket.req.general,
+.wonderful .socket.req.financier {
+  font-size: 0.45rem;
+}
+
+.wonderful button.socket.free,
+.wonderful span.socket.free {
+  color: var(--lo, #66727e);
+  background: rgba(18, 35, 31, 0.1);
+  border: 2px dashed var(--c, #9aa5b1);
+  box-shadow: inset 0 2px 3px rgba(18, 35, 31, 0.25);
+}
+
+.wonderful button.socket.free.general,
+.wonderful button.socket.free.financier {
+  font-size: 0.5rem;
+}
+
+.wonderful button.socket.free:disabled {
+  opacity: 0.8;
+  cursor: default;
+}
+
+.wonderful button.socket.free.fits {
+  color: var(--on, #0f1b19);
+  background: linear-gradient(155deg, var(--hi, #d6dde3) 0%, var(--c, #9aa5b1) 100%);
+  border: 2px solid var(--pop);
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(255, 107, 139, 0.4), 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.wonderful button.socket.free.fits:hover {
+  transform: scale(1.12);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wonderful button.socket.free.fits {
+    animation: wonderful-glow 1.7s ease-in-out infinite;
+    transition: transform 0.1s;
+  }
+}
+
+@keyframes wonderful-glow {
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 107, 139, 0.12), 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* A card you can pick: the whole card is the button. */
+.wonderful button.card {
+  padding: 0 0 0.6rem;
+  font: inherit;
+  font-weight: 400;
+  color: var(--card-ink);
+  background: var(--pearl);
+  border: none;
+  border-radius: 0.8rem;
+}
+
+.wonderful button.card.pickable {
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.wonderful button.card.pickable:hover:not(:disabled) {
+  transform: translateY(-4px);
+  box-shadow: 0 0 0 3px var(--pop), 0 12px 22px rgba(0, 0, 0, 0.4);
+}
+
+.wonderful button.card.passing:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.wonderful .card.picked {
+  box-shadow: 0 0 0 3px var(--pop), 0 12px 22px rgba(0, 0, 0, 0.4);
+}
+
+.wonderful .your-pick {
+  max-width: 12rem;
+  margin-bottom: 1rem;
+}
+
+.wonderful .plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.wonderful .plan-card .card {
+  flex: 1;
+}
+
+.wonderful .plan-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 0.4rem;
+}
+
+.wonderful .plan-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+.wonderful .plan-actions .cube {
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 0.6rem;
+}
+
+.wonderful .building .card-foot {
+  justify-content: space-between;
+}
+
+.wonderful .progress {
+  font-size: 0.78rem;
+  color: var(--card-soft);
+}
+
+.wonderful .building .card-foot .link {
+  color: var(--card-soft);
+  font-size: 0.78rem;
+}
+
+.wonderful .building .card-foot .link:hover {
+  color: var(--vehicle);
+}
+
+/* ---------- production ---------- */
+
+.wonderful .steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.wonderful .step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.7rem 0.25rem 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: var(--felt-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  opacity: 0.6;
+}
+
+.wonderful .step.done {
+  opacity: 0.4;
+}
+
+.wonderful .step.now {
+  color: var(--text);
+  font-weight: 600;
+  opacity: 1;
+  border-color: var(--pop);
+  box-shadow: 0 0 0 2px rgba(255, 107, 139, 0.3);
+}
+
+.wonderful .race {
+  margin-top: 0.4rem;
+}
+
+.wonderful .race .subhead {
+  margin-top: 0.9rem;
+}
+
+.wonderful .race .subhead .count {
+  margin-left: 0.3rem;
+}
+
+.wonderful .race-list {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 34rem;
+}
+
+.wonderful .race-row {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(3rem, 1fr) 1.5rem auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.wonderful .race-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wonderful .race-bar {
+  display: block;
+  width: var(--w, 0%);
+  height: 0.6rem;
+  min-width: 0.2rem;
+  background: var(--line);
+  border-radius: 999px;
+}
+
+.wonderful .race-n {
+  font-weight: 700;
+  text-align: right;
+}
+
+.wonderful .race-row.lead .race-bar {
+  background: var(--pop);
+}
+
+.wonderful .race-prize {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pop);
+}
+
+.wonderful .choose {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  background: var(--felt-2);
+  border: 1px solid var(--pop);
+  border-radius: 0.9rem;
+}
+
+.wonderful .choose-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+/* ---------- the tray ---------- */
+
+.wonderful .tray {
+  position: sticky;
+  bottom: 0.7rem;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  padding: 0.65rem 0.8rem;
+  background: var(--felt-3);
+  border-color: var(--pearl-dim);
+  border-radius: 1.1rem;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+}
+
+.wonderful .tray-pieces,
+.wonderful .tray-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.wonderful .piece {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.35rem;
+  border-radius: 999px;
+}
+
+.wonderful .piece.selected {
+  border-color: var(--pop);
+  box-shadow: 0 0 0 2px rgba(255, 107, 139, 0.45);
+}
+
+.wonderful .piece .count {
+  font-weight: 700;
+}
+
+.wonderful .piece-name {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.wonderful .empire-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.wonderful .pips {
+  display: inline-flex;
+  gap: 0.22rem;
+}
+
+.wonderful .pip {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+
+.wonderful .pip.on {
+  background: var(--pearl);
+  border-color: var(--pearl);
+}
+
+/* ---------- your Empire ---------- */
+
+.wonderful .empire-head,
+.wonderful .rival-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.wonderful .empire-head h2 {
+  margin-bottom: 0;
+}
+
+.wonderful .empire-name {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.wonderful .points {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.wonderful .points-num {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 2.1rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.wonderful .points-word {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.wonderful .empire-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 2rem;
+  margin: 0.8rem 0 0.2rem;
+}
+
+.wonderful .stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.wonderful .stat-block .row-label {
+  color: var(--muted);
+}
+
+.wonderful .stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.8rem;
+}
+
+.wonderful .stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.wonderful .stat b {
+  min-width: 0.7rem;
+}
+
+.wonderful .empire .empty {
+  margin-top: 0.9rem;
+}
+
+.wonderful .kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.4rem, 1fr));
+  gap: 0.4rem 0.9rem;
+}
+
+.wonderful .kind-col {
+  min-width: 0;
+}
+
+.wonderful .kinds .kind-col .cards.finished {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.wonderful .kind-col .subhead {
+  margin-top: 0.9rem;
+}
+
+.wonderful .kind-col .kind-icon {
+  color: var(--muted);
+}
+
+/* ---------- the other players ---------- */
+
+.wonderful .rival-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.wonderful .rival {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.8rem 0.9rem;
+  background: var(--felt-3);
+  border-radius: 0.9rem;
+}
+
+.wonderful .rival h3 {
+  font-size: 1.1rem;
+}
+
+.wonderful .rival .points-num {
+  font-size: 1.7rem;
+}
+
+.wonderful .rival-status {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.wonderful .rival-status.done {
+  color: #6fe3a4;
+}
+
+.wonderful .rival .cube {
+  width: 1.2rem;
+  height: 1.2rem;
+  font-size: 0.62rem;
+}
+
+.wonderful .rival .cube.general,
+.wonderful .rival .cube.financier {
+  font-size: 0.42rem;
+}
+
+.wonderful .minis,
+.wonderful .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.wonderful .mini {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  background: rgba(0, 0, 0, 0.22);
+  border-left: 4px solid var(--band, var(--structure));
+  border-radius: 0.4rem;
+}
+
+.wonderful .mini-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wonderful .mini-progress {
+  width: 3rem;
+  height: 0.4rem;
+  background: linear-gradient(to right, var(--pearl) var(--done, 0%), rgba(255, 255, 255, 0.18) var(--done, 0%));
+  border-radius: 999px;
+}
+
+.wonderful .mini-count {
+  min-width: 2rem;
+  text-align: right;
+  color: var(--muted);
+}
+
+.wonderful .chip {
+  padding: 0.12rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--band, var(--structure));
+  border-radius: 999px;
+}
+
+.wonderful .log {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.wonderful .log li:first-child {
+  color: var(--text);
+}
+
+/* ---------- the dialog for a recycled cube ---------- */
+
+.wonderful .modal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(3, 14, 14, 0.74);
+}
+
+.wonderful .modal {
+  width: min(28rem, 100%);
+  background: var(--felt-2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.wonderful .modal-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.wonderful .warning {
+  margin-top: 0.6rem;
+  color: #ffb4c0;
+  font-size: 0.9rem;
+}
+
+.wonderful .targets {
+  display: grid;
+  gap: 0.45rem;
+  margin: 1rem 0 0.6rem;
+}
+
+.wonderful .targets button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  text-align: left;
+}
+
+.wonderful .target-detail {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* ---------- the end ---------- */
+
+.wonderful .verdict {
+  font-size: 2rem;
+  line-height: 1.1;
+  margin-bottom: 1rem;
+}
+
+.wonderful .table-wrap {
+  overflow-x: auto;
+}
+
+.wonderful .standings {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.wonderful .standings th,
+.wonderful .standings td {
+  padding: 0.55rem 0.7rem;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.wonderful .standings thead th {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.wonderful .standings th:first-child {
+  text-align: left;
+}
+
+.wonderful .standings tbody th {
+  font-weight: 600;
+}
+
+.wonderful .standings .total {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.wonderful .standings .cards-done {
+  color: var(--muted);
+}
+
+.wonderful .standings tr.winner {
+  background: rgba(255, 107, 139, 0.12);
+}
+
+.wonderful .results .note {
+  margin-top: 0.8rem;
+  max-width: 60ch;
+}
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 960px) {
+  .wonderful .board-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .wonderful .status {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .wonderful .seats {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    max-width: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .wonderful .app {
+    padding: 0.6rem 0.75rem 6rem;
+  }
+
+  .wonderful .cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+
+  .wonderful .cards.kept,
+  .wonderful .cards.finished {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wonderful .round-num {
+    font-size: 2.6rem;
+  }
+
+  .wonderful .piece-name {
+    display: none;
+  }
+
+  .wonderful .race-row {
+    grid-template-columns: 4.5rem minmax(2rem, 1fr) 1.2rem auto;
+    gap: 0.4rem;
+  }
+
+  .wonderful .room-code {
+    font-size: 2.6rem;
+  }
+
+  /* The standings: one block per player, so the total never scrolls out of
+     sight. The header row stays for screen readers only. */
+  .wonderful .standings,
+  .wonderful .standings tbody {
+    display: block;
+  }
+
+  .wonderful .standings thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .wonderful .standings tr {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.45rem 0.4rem;
+    padding: 0.7rem 0.3rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .wonderful .standings th,
+  .wonderful .standings td {
+    padding: 0;
+    border: none;
+    text-align: left;
+    white-space: normal;
+  }
+
+  .wonderful .standings tbody th {
+    grid-column: 1 / 5;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  .wonderful .standings td.total {
+    grid-column: 5;
+    grid-row: 1;
+    text-align: right;
+  }
+
+  .wonderful .standings td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: var(--muted);
+  }
+}

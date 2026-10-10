@@ -4,19 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Games</title>
-    <!-- Hanabi's typefaces; the other screens use the system font. -->
+    <!-- Hanabi's and It's a Wonderful World's typefaces; Catan uses the system font. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=Inter:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/style-44f2507da3b4d054.css" integrity="sha384-WZ6UkTC6I/Bitaj/NKRIA0WfIdZLE3SWOOyNp4e6/tORCut2RKLi5hEr4/X84f0t"/>
+    <link rel="stylesheet" href="/style-76a2dc5fe91b01c0.css" integrity="sha384-PTyAWJpNiQOkThgE7JITvh1p1k5EIU559i0rqBj122Dh7fPgcMAm3bVz8J18/xe1"/>
     <link rel="stylesheet" href="/hanabi-201b058decda5c7b.css" integrity="sha384-ye/Q350gzZ/RMFtQTW4krfw8d8vGhJLmet6ouzaNwAu8DivK0K9XTlXbJAZ8g7fq"/>
+    <link rel="stylesheet" href="/wonderful-717fa25f2ace457.css" integrity="sha384-tgRuRLJaB6bxDH5YKeyYu2qIaQ30kbknS+SySl6BREimKVGgGNP4Oo+gKTCwXYAT"/>
     
 <script type="module">
-import init, * as bindings from '/client-c54cde62ed096071.js';
-const wasm = await init({ module_or_path: '/client-c54cde62ed096071_bg.wasm' });
+import init, * as bindings from '/client-e7064a254d7071a3.js';
+const wasm = await init({ module_or_path: '/client-e7064a254d7071a3_bg.wasm' });
 
 
 window.wasmBindings = bindings;
@@ -25,6 +26,6 @@ window.wasmBindings = bindings;
 dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
 
 </script>
-  <link rel="modulepreload" href="/client-c54cde62ed096071.js" crossorigin="anonymous" integrity="sha384-5WVdRSx/ZR+jq8a5TV0q8V3unNQQS6ttnQAtJHpg7SwZGfSTZa9QwjupqAqrH4wA"><link rel="preload" href="/client-c54cde62ed096071_bg.wasm" crossorigin="anonymous" integrity="sha384-885nR1C/wT4752cY/kGOIKKjyhdPJWgPA8m9lJq4y2hopWdvw4qgRjTt/RpcFada" as="fetch" type="application/wasm"></head>
+  <link rel="modulepreload" href="/client-e7064a254d7071a3.js" crossorigin="anonymous" integrity="sha384-p7nAPNuTzi3RBTcx1YFgUccdopb+1bX2o7HO6y3tYe3T66nKOGdWbyMhLYhlPRUr"><link rel="preload" href="/client-e7064a254d7071a3_bg.wasm" crossorigin="anonymous" integrity="sha384-zGT9+G3PD9zkJFUuK+lwMonIbDmztq/liI/l9J+oGqIa1YNYQ5YCgWNkjdzZvcoK" as="fetch" type="application/wasm"></head>
   <body></body>
 </html>
