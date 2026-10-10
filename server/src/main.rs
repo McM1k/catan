@@ -14,7 +14,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use protocol::{ClientMsg, ServerMsg};
-use rooms::{disconnect, process, remove_if_abandoned, Ident, Rooms, Shared};
+use rooms::{disconnect, free_dropped_seat, process, remove_if_abandoned, Ident, Rooms, Shared};
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
@@ -24,6 +24,10 @@ use tower_http::services::{ServeDir, ServeFile};
 
 /// How long an emptied room is kept around for players to come back to.
 const ABANDONED_ROOM_TTL: Duration = Duration::from_secs(30 * 60);
+
+/// How long a lobby seat waits for a player whose connection dropped (a
+/// reload, a phone switching apps) before it is freed for someone else.
+const LOBBY_GRACE: Duration = Duration::from_secs(2 * 60);
 
 #[tokio::main]
 async fn main() {
@@ -80,11 +84,14 @@ async fn handle_socket(socket: WebSocket, state: Shared) {
         }
     }
 
-    if let Some(room) = disconnect(&state, &tx, ident) {
-        // Garbage-collect a room nobody comes back to.
+    if let Some(id) = disconnect(&state, &tx, ident) {
         tokio::spawn(async move {
-            tokio::time::sleep(ABANDONED_ROOM_TTL).await;
-            remove_if_abandoned(&state, &room);
+            // Free a lobby seat its player hasn't come back to...
+            tokio::time::sleep(LOBBY_GRACE).await;
+            free_dropped_seat(&state, &id, LOBBY_GRACE);
+            // ...and garbage-collect a room nobody comes back to.
+            tokio::time::sleep(ABANDONED_ROOM_TTL - LOBBY_GRACE).await;
+            remove_if_abandoned(&state, &id.room);
         });
     }
     writer.abort();

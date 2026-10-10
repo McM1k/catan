@@ -194,29 +194,38 @@ impl App {
     }
 }
 
+/// Where `key` is kept. The name is shared by every tab, as a convenience.
+/// The room and the seat token belong to one tab (and survive its reloads):
+/// shared, a second tab - another player on the same machine - would
+/// reconnect into the first tab's seat instead of reaching the join screen.
 #[cfg(target_arch = "wasm32")]
-fn storage() -> Option<web_sys::Storage> {
-    web_sys::window()?.local_storage().ok()?
+fn storage(key: &str) -> Option<web_sys::Storage> {
+    let window = web_sys::window()?;
+    if key == KEY_NAME {
+        window.local_storage().ok()?
+    } else {
+        window.session_storage().ok()?
+    }
 }
 
 // Native builds only exist for `cargo check` and render tests.
 #[cfg(not(target_arch = "wasm32"))]
-fn storage() -> Option<web_sys::Storage> {
+fn storage(_key: &str) -> Option<web_sys::Storage> {
     None
 }
 
 pub fn load(key: &str) -> Option<String> {
-    storage()?.get_item(key).ok()?
+    storage(key)?.get_item(key).ok()?
 }
 
 pub fn save(key: &str, value: &str) {
-    if let Some(s) = storage() {
+    if let Some(s) = storage(key) {
         let _ = s.set_item(key, value);
     }
 }
 
 fn clear_session() {
-    if let Some(s) = storage() {
+    if let Some(s) = storage(KEY_ROOM) {
         let _ = s.remove_item(KEY_ROOM);
         let _ = s.remove_item(KEY_TOKEN);
     }

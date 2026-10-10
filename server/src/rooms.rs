@@ -17,6 +17,7 @@ use rand::{seq::SliceRandom, Rng};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -51,6 +52,8 @@ pub struct Seat {
     pub token: String,
     /// `None` while the player is disconnected.
     pub tx: Option<Tx>,
+    /// When the connection last dropped (only meaningful while `tx` is `None`).
+    pub dropped_at: Option<Instant>,
 }
 
 /// Which seat a connection controls.
@@ -154,6 +157,7 @@ pub fn process(state: &Shared, tx: &Tx, ident: &mut Option<Ident>, msg: ClientMs
                         name,
                         token: token.clone(),
                         tx: Some(tx.clone()),
+                        dropped_at: None,
                     }],
                     rules: GameRules::default(),
                     game: None,
@@ -200,6 +204,7 @@ pub fn process(state: &Shared, tx: &Tx, ident: &mut Option<Ident>, msg: ClientMs
                 name,
                 token: tok.clone(),
                 tx: Some(tx.clone()),
+                dropped_at: None,
             });
             let _ = tx.send(ServerMsg::Joined { room: code.clone(), token: tok.clone() });
             broadcast(r);
@@ -351,27 +356,53 @@ pub fn broadcast(room: &Room) {
 
 fn leave(rooms: &mut Rooms, id: &Ident, tx: &Tx, explicit: bool) {
     let Some(r) = rooms.map.get_mut(&id.room) else { return };
-    if r.game.is_none() {
-        // Lobby: free the seat (the next player in line becomes host).
-        r.seats.retain(|s| s.token != id.token);
-        if r.seats.is_empty() {
-            rooms.map.remove(&id.room);
-            return;
-        }
-    } else if let Some(seat) = r.seats.iter_mut().find(|s| s.token == id.token) {
-        // In a running game the seat is kept so the player can come back,
-        // unless the connection was already replaced by a reconnect.
+    if explicit && r.game.is_none() {
+        free_seat(rooms, id);
+        return;
+    }
+    if let Some(seat) = r.seats.iter_mut().find(|s| s.token == id.token) {
+        // Otherwise the seat is kept so the player can come back (to a lobby
+        // only for a while, see `free_dropped_seat`), unless the connection
+        // was already replaced by a reconnect.
         if explicit || seat.tx.as_ref().is_some_and(|t| t.same_channel(tx)) {
             seat.tx = None;
+            seat.dropped_at = Some(Instant::now());
         }
     }
-    let r = &rooms.map[&id.room];
     broadcast(r);
 }
 
-/// A connection has closed. Returns the room to check for abandonment later,
-/// if there is one.
-pub fn disconnect(state: &Shared, tx: &Tx, ident: Option<Ident>) -> Option<String> {
+/// Gives a lobby seat up (the next player in line becomes host), closing
+/// the room if it was the last one.
+fn free_seat(rooms: &mut Rooms, id: &Ident) {
+    let Some(r) = rooms.map.get_mut(&id.room) else { return };
+    r.seats.retain(|s| s.token != id.token);
+    if r.seats.is_empty() {
+        rooms.map.remove(&id.room);
+    } else {
+        broadcast(r);
+    }
+}
+
+/// Frees a lobby seat whose player dropped at least `grace` ago and hasn't
+/// come back, so a reload or a phone switching apps doesn't cost the seat
+/// but a player who is really gone doesn't stay in the way. Seats in a
+/// running game are kept for good.
+pub fn free_dropped_seat(state: &Shared, id: &Ident, grace: Duration) {
+    let mut rooms = state.lock().unwrap();
+    let Some(r) = rooms.map.get(&id.room) else { return };
+    let gone = r.game.is_none()
+        && r.seats.iter().any(|s| {
+            s.token == id.token && s.tx.is_none() && s.dropped_at.is_some_and(|t| t.elapsed() >= grace)
+        });
+    if gone {
+        free_seat(&mut rooms, id);
+    }
+}
+
+/// A connection has closed. Returns the seat it held, to free or to check
+/// the room for abandonment later, if there is one.
+pub fn disconnect(state: &Shared, tx: &Tx, ident: Option<Ident>) -> Option<Ident> {
     let id = ident?;
     let mut rooms = state.lock().unwrap();
     // Ignore stale disconnects from a connection that was replaced.
@@ -387,7 +418,7 @@ pub fn disconnect(state: &Shared, tx: &Tx, ident: Option<Ident>) -> Option<Strin
         }
     }
     leave(&mut rooms, &id, tx, false);
-    Some(id.room)
+    Some(id)
 }
 
 /// Drops the room if everybody has left it.
@@ -621,6 +652,84 @@ mod tests {
         assert!(!state.lock().unwrap().map.contains_key(&code));
     }
 
+    /// The names in the latest lobby message in `msgs`, offline ones marked.
+    fn lobby_names(msgs: &[ServerMsg]) -> Vec<String> {
+        msgs.iter()
+            .rev()
+            .find_map(|m| match m {
+                ServerMsg::Lobby { players, .. } => Some(
+                    players
+                        .iter()
+                        .map(|p| if p.connected { p.name.clone() } else { format!("{} (offline)", p.name) })
+                        .collect(),
+                ),
+                _ => None,
+            })
+            .expect("a lobby message")
+    }
+
+    #[test]
+    fn a_dropped_lobby_seat_waits_for_its_player() {
+        let state = new_state();
+        let (code, mut clients) = lobby(&state, GameKind::Hanabi, 2);
+        let mut bob = clients.remove(1);
+        let token = bob.token();
+
+        // A reload: the old socket closes first, the seat stays, offline.
+        let id = disconnect(&state, &bob.tx, bob.ident.take()).unwrap();
+        assert_eq!(lobby_names(&clients[0].drain()), ["P0", "P1 (offline)"]);
+        free_dropped_seat(&state, &id, Duration::from_secs(120));
+        assert_eq!(state.lock().unwrap().map[&code].seats.len(), 2, "still within the grace period");
+
+        // The new page reclaims it with the token, under whatever name.
+        let mut back = Client::new();
+        let r = back.send(&state, ClientMsg::Join { room: code.clone(), name: "P0".into(), token: Some(token) });
+        assert_eq!(r, None);
+        assert_eq!(lobby_names(&back.drain()), ["P0", "P1"]);
+
+        // The first timer firing later doesn't free a seat that came back.
+        free_dropped_seat(&state, &id, Duration::ZERO);
+        assert_eq!(state.lock().unwrap().map[&code].seats.len(), 2);
+    }
+
+    #[test]
+    fn a_lone_host_who_drops_keeps_the_room_open_until_the_grace_runs_out() {
+        let state = new_state();
+        let (mut host, code) = create(&state, GameKind::Hanabi, "Ann");
+        let id = disconnect(&state, &host.tx, host.ident.take()).unwrap();
+
+        // The room survives the host switching apps to send the code...
+        let mut bob = join(&state, &code, "Bob").unwrap();
+        assert_eq!(lobby_names(&bob.drain()), ["Ann (offline)", "Bob"]);
+
+        // ...and once Ann's seat is given up, Bob hosts.
+        free_dropped_seat(&state, &id, Duration::ZERO);
+        match bob.drain().last().unwrap() {
+            ServerMsg::Lobby { players, is_host, .. } => {
+                assert_eq!(players.len(), 1);
+                assert!(*is_host);
+            }
+            other => panic!("expected the lobby, got {other:?}"),
+        }
+
+        // Alone, a dropped host's room closes when the grace runs out.
+        let (mut cy, code) = create(&state, GameKind::Catan, "Cy");
+        let id = disconnect(&state, &cy.tx, cy.ident.take()).unwrap();
+        free_dropped_seat(&state, &id, Duration::ZERO);
+        assert!(!state.lock().unwrap().map.contains_key(&code));
+    }
+
+    #[test]
+    fn a_running_game_keeps_dropped_seats_past_the_grace() {
+        let state = new_state();
+        let (code, mut clients) = lobby(&state, GameKind::Hanabi, 2);
+        clients[0].send(&state, ClientMsg::Start);
+        let mut bob = clients.remove(1);
+        let id = disconnect(&state, &bob.tx, bob.ident.take()).unwrap();
+        free_dropped_seat(&state, &id, Duration::ZERO);
+        assert_eq!(state.lock().unwrap().map[&code].seats.len(), 2);
+    }
+
     #[test]
     fn a_dropped_player_gets_their_seat_back_with_the_token() {
         for game in GameKind::ALL {
@@ -635,7 +744,7 @@ mod tests {
 
             // The connection drops: the seat stays, marked offline.
             let to_check = disconnect(&state, &bob.tx, bob.ident.take());
-            assert_eq!(to_check.as_deref(), Some(code.as_str()));
+            assert_eq!(to_check.map(|id| id.room).as_deref(), Some(code.as_str()));
             let offline = clients[0].drain().pop().expect("the host is told");
             let connected = match offline {
                 ServerMsg::CatanState { connected, .. }
@@ -680,7 +789,7 @@ mod tests {
         let mut fresh = Client::new();
         fresh.send(&state, ClientMsg::Join { room: code.clone(), name: "P1".into(), token: Some(token) });
         let stale = disconnect(&state, &old.tx, old.ident);
-        assert_eq!(stale, None);
+        assert!(stale.is_none());
         let rooms = state.lock().unwrap();
         assert!(rooms.map[&code].seats.iter().all(|s| s.tx.is_some()));
     }
