@@ -12,7 +12,8 @@
 //! 2. **Planning.** Each drafted card is either put under construction or
 //!    recycled: it is discarded and its recycling bonus, a cube, goes onto a
 //!    building or onto the Empire straight away. A building whose spaces are
-//!    all filled is finished at once.
+//!    all filled is finished at once, and pays its construction bonus
+//!    (characters or Krystallium, which are kept until used).
 //! 3. **Production.** Five steps, one per resource (Materials, Energy,
 //!    Science, Gold, Exploration). In each, everybody produces as many cubes
 //!    as they have icons for that resource, the player who produced the most
@@ -62,9 +63,11 @@ pub enum Target {
 /// Something a player holds and can place on a building.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Piece {
+    /// A cube produced in the current step.
     Cube(Res),
-    /// Krystallium standing in for a cube of this resource.
-    Krystallium(Res),
+    /// Krystallium: `Some(res)` standing in for a cube of that resource,
+    /// `None` on a space that asks for Krystallium itself.
+    Krystallium(Option<Res>),
     General,
     Financier,
 }
@@ -78,8 +81,8 @@ pub enum Action {
     /// Planning: recycle a drafted card; its cube goes to `to`.
     Recycle { card: CardId, to: Target },
     /// Planning or production: give up a building. What was placed on it is
-    /// lost; its recycling cube goes to `to`.
-    Scrap { card: CardId, to: Target },
+    /// lost; its recycling cube goes to the Empire.
+    Scrap { card: CardId },
     /// Planning or production: place something you hold.
     Place { piece: Piece, target: Target },
     /// Production, Science: pick the character the supremacy bonus gives.
@@ -165,9 +168,6 @@ pub struct PlayerState {
     pub krystallium: u8,
     pub generals: u8,
     pub financiers: u8,
-    /// Cubes from construction bonuses, to be placed this round. Cubes still
-    /// here when the round ends go to the Empire.
-    pub pending: [u8; 5],
     /// Cubes produced in the current step and not placed yet.
     pub pool: u8,
     /// What was produced in the current step.
@@ -290,20 +290,23 @@ impl State {
     /// The seat's points as things stand.
     pub fn score_of(&self, seat: usize) -> Score {
         let p = &self.players[seat];
+        let held = |token: Token| match token {
+            Token::General => p.generals as u32,
+            Token::Financier => p.financiers as u32,
+        };
         let mut score = Score { cards: p.empire.len() as u32, ..Score::default() };
-        for id in &p.empire {
-            let card = id.def();
-            score.gross += card.vp as u32;
-            if let Some((kind, points)) = card.combo {
+        let empire = &EMPIRES[seat % EMPIRES.len()];
+        let combos = p.empire.iter().map(|id| (id.def().combo, id.def().per_token));
+        for (combo, per_token) in combos.chain([(empire.combo, empire.per_token)]) {
+            if let Some((kind, points)) = combo {
                 score.combo += points as u32 * count_kind(&p.empire, kind);
             }
-            if let Some((token, points)) = card.per_token {
-                let held = match token {
-                    Token::General => p.generals,
-                    Token::Financier => p.financiers,
-                };
-                score.combo += points as u32 * held as u32;
+            if let Some((token, points)) = per_token {
+                score.combo += points as u32 * held(token);
             }
+        }
+        for id in &p.empire {
+            score.gross += id.def().vp as u32;
         }
         score.generals = p.generals as u32;
         score.financiers = p.financiers as u32;
@@ -340,7 +343,7 @@ impl State {
             Action::Draft { card } => self.draft(seat, card)?,
             Action::Build { card } => self.build(seat, card)?,
             Action::Recycle { card, to } => self.recycle(seat, card, to)?,
-            Action::Scrap { card, to } => self.scrap(seat, card, to)?,
+            Action::Scrap { card } => self.scrap(seat, card)?,
             Action::Place { piece, target } => self.place(seat, piece, target)?,
             Action::Choose { token } => self.choose(seat, token)?,
             Action::Ready => self.ready(seat)?,
@@ -432,14 +435,14 @@ impl State {
             .position(|&c| c == card)
             .ok_or(Error::NotDrafted)?;
         let res = card.def().recycle;
-        self.check_cube_target(seat, res, to, None)?;
+        self.check_cube_target(seat, res, to)?;
         self.players[seat].drafted.remove(at);
         self.discard.push(card);
         self.place_cube(seat, res, to);
         Ok(())
     }
 
-    fn scrap(&mut self, seat: usize, card: CardId, to: Target) -> Result<(), Error> {
+    fn scrap(&mut self, seat: usize, card: CardId) -> Result<(), Error> {
         if !matches!(self.phase, Phase::Planning | Phase::Production { .. }) {
             return Err(Error::WrongPhase);
         }
@@ -448,23 +451,17 @@ impl State {
             .iter()
             .position(|b| b.card == card)
             .ok_or(Error::NotUnderConstruction)?;
-        let res = card.def().recycle;
-        self.check_cube_target(seat, res, to, Some(card))?;
         self.players[seat].buildings.remove(at);
         self.discard.push(card);
-        self.place_cube(seat, res, to);
+        self.add_empire_cube(seat);
         Ok(())
     }
 
-    /// Whether a cube of `res` can go to `to`. `exclude` is a building that
-    /// is about to disappear.
-    fn check_cube_target(&self, seat: usize, res: Res, to: Target, exclude: Option<CardId>) -> Result<(), Error> {
+    /// Whether a cube of `res` can go to `to`.
+    fn check_cube_target(&self, seat: usize, res: Res, to: Target) -> Result<(), Error> {
         match to {
             Target::Empire => Ok(()),
             Target::Card(id) => {
-                if exclude == Some(id) {
-                    return Err(Error::InvalidTarget);
-                }
                 let b = self.players[seat]
                     .buildings
                     .iter()
@@ -513,12 +510,12 @@ impl State {
         }
         p.buildings.remove(at);
         p.empire.push(id);
-        match id.def().bonus {
-            Some(Bonus::Cube(res)) => p.pending[res.index()] += 1,
-            Some(Bonus::Krystallium) => p.krystallium += 1,
-            Some(Bonus::Token(Token::General)) => p.generals += 1,
-            Some(Bonus::Token(Token::Financier)) => p.financiers += 1,
-            None => {}
+        for bonus in id.def().bonus {
+            match bonus {
+                Bonus::Krystallium => p.krystallium += 1,
+                Bonus::Token(Token::General) => p.generals += 1,
+                Bonus::Token(Token::Financier) => p.financiers += 1,
+            }
         }
         self.push_event(Event::Completed { seat, card: id });
     }
@@ -530,35 +527,37 @@ impl State {
         }
         match piece {
             Piece::Cube(res) => {
-                // Cubes produced in this step come first, then bonus cubes.
-                let from_pool = matches!(self.phase, Phase::Production { step }
+                // Only the cubes produced in this step are held.
+                let in_pool = matches!(self.phase, Phase::Production { step }
                     if (step as usize) < Res::ALL.len() && Res::ALL[step as usize] == res)
                     && self.players[seat].pool > 0;
-                if !from_pool && self.players[seat].pending[res.index()] == 0 {
+                if !in_pool {
                     return Err(Error::NothingToPlace);
                 }
-                self.check_cube_target(seat, res, target, None)?;
+                self.check_cube_target(seat, res, target)?;
                 let p = &mut self.players[seat];
-                if from_pool {
-                    p.pool -= 1;
-                    // Everything placed: nothing left to wait for in this step.
-                    if p.pool == 0 && !p.choose {
-                        p.ready = true;
-                    }
-                } else {
-                    p.pending[res.index()] -= 1;
+                p.pool -= 1;
+                // Everything placed: nothing left to wait for in this step.
+                if p.pool == 0 && !p.choose {
+                    p.ready = true;
                 }
                 self.place_cube(seat, res, target);
                 Ok(())
             }
-            Piece::Krystallium(res) => {
-                let id = self.building_with_room(seat, target, |c| c.res[res.index()] > 0)?;
+            Piece::Krystallium(space) => {
+                let id = match space {
+                    Some(res) => self.building_with_room(seat, target, |c| c.res[res.index()] > 0)?,
+                    None => self.building_with_room(seat, target, |c| c.krystallium > 0)?,
+                };
                 let p = &mut self.players[seat];
                 if p.krystallium == 0 {
                     return Err(Error::NothingToPlace);
                 }
                 p.krystallium -= 1;
-                self.fill(seat, id, |f| f.res[res.index()] += 1);
+                match space {
+                    Some(res) => self.fill(seat, id, |f| f.res[res.index()] += 1),
+                    None => self.fill(seat, id, |f| f.krystallium += 1),
+                }
                 Ok(())
             }
             Piece::General => {
@@ -716,22 +715,14 @@ impl State {
         let p = &self.players[seat];
         p.buildings.iter().any(|b| {
             let left = b.remaining();
-            (p.krystallium > 0 && left.res.iter().any(|&n| n > 0))
+            (p.krystallium > 0 && (left.krystallium > 0 || left.res.iter().any(|&n| n > 0)))
                 || (p.generals > 0 && left.generals > 0)
                 || (p.financiers > 0 && left.financiers > 0)
         })
     }
 
     fn end_round(&mut self) {
-        for seat in 0..self.seats() {
-            // Bonus cubes nobody placed go to the Empire.
-            for res in 0..Res::ALL.len() {
-                while self.players[seat].pending[res] > 0 {
-                    self.players[seat].pending[res] -= 1;
-                    self.add_empire_cube(seat);
-                }
-            }
-            let p = &mut self.players[seat];
+        for p in &mut self.players {
             p.pool = 0;
             p.produced = 0;
             p.ready = false;

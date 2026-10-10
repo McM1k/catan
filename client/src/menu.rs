@@ -111,7 +111,7 @@ fn wonderful_icon() -> impl IntoView {
                 <circle cx="32" cy="31" r="8" fill="#ff6b8b" />
                 <ellipse cx="32" cy="31" rx="13" ry="3.4" fill="none" stroke="#0b2a2a" stroke-width="1.4" transform="rotate(-18 32 31)" />
                 {cube(16.5, "#9aa5b1")}
-                {cube(23.0, "#e5533d")}
+                {cube(23.0, "#2b2f33")}
                 {cube(29.5, "#3fb86e")}
                 {cube(36.0, "#f2c230")}
                 {cube(42.5, "#3b82e0")}

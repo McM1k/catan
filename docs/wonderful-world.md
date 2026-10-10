@@ -5,8 +5,10 @@ code is shaped the way it is, what is known to be wrong, and what is left. The R
 "It's a Wonderful World" section has the rules as played and where the code lives.
 
 Status (2026-10-10): the base game runs end to end in tests, from the lobby to the final
-standings, for 2 to 5 players. **It has never been played in a browser**, and the 150 cards
-are an invented placeholder set.
+standings, for 2 to 5 players. **It has never been played in a browser.** The cards and the
+Empires are the published base game's (side A of the Empires), taken from Game Park's online
+version ([gamepark/its-a-wonderful-world](https://github.com/gamepark/its-a-wonderful-world),
+`rules/src/material/Developments.ts` and `Empires.ts`).
 
 ## Rules: what is confirmed and what was chosen
 
@@ -19,20 +21,22 @@ character; the strictly highest producer takes the character; the score is print
 type combos and 1 per character; Krystallium and unfinished cards score nothing; ties go to
 most finished cards, then most characters, then are shared.
 
-Not re-checked: which resource gives which character (Materials and Energy a General, Gold
-and Exploration a Financier, Science the winner's choice), and that a tie gives nothing.
+Confirmed against Game Park's rules code and Board Game Arena's game help: Materials and Gold
+give a Financier, Energy and Exploration a General, Science the winner's choice (both sources
+agree; the first version of this engine had Materials and Exploration the wrong way round);
+a tie for the most gives nothing; production is counted at the start of each step;
+construction bonuses are only characters and Krystallium, kept until used; some cost spaces
+take Krystallium and nothing else; Krystallium and characters can be placed in Planning and in
+any production step; a scrapped building's recycling cube goes on the Empire.
 
 Where the engine fills a gap or picks a convenience:
 
 | Topic | What the engine does | Status |
 |---|---|---|
-| Wrap-up step | A sixth production step after Exploration to place Krystallium and characters still held. Skipped when nobody holds one that fits a free space. | Invented so late pieces aren't stranded. Keep unless the rulebook says when pieces may be placed. |
-| Bonus cubes | A cube paid by a finished card is held, can go on any building or the Empire at any time, and goes to the Empire at round end if unplaced. | Convenience. The printed rule is probably "place it immediately". See the bonus-cube leak below. **Verify.** |
-| Scrap | Allowed in Planning or any production step. Everything on the building is lost; its recycling cube is still paid. | Whether the recycling cube is paid is assumed. **Verify.** |
-| Empire production | Each seat plays one of five placeholder Empires with a small fixed production (seat *i* plays Empire *i*). | Invented so rounds 1–2 are playable with placeholder cards. **Verify** whether real Empires produce. |
-| New cards producing | Production is counted at the start of each step: a card finished in step *k* first produces in step *k+1*; one finished in Planning produces in Materials the same round. | Believed to match the printed rule. **Verify.** |
-| Placing in Planning | Bonus cubes, Krystallium and characters can be placed in Planning too. | Needed because a recycled cube can finish a building and pay a bonus. **Verify.** |
-| Krystallium spaces | No cost space demands Krystallium itself. | Possible gap: the summary mentions "a space requiring Krystallium". If real cards have one, `Cost`, the Krystallium branch of `place` and the client's `Space` need a new case. |
+| Wrap-up step | A sixth production step after Exploration to place Krystallium and characters still held. Skipped when nobody holds one that fits a free space. | Not in the published game, where these can be placed during any step before you end it. Needed here because a player whose cubes are all placed is done with a step at once. |
+| Scrap | Allowed in Planning or any production step. Everything on the building is lost, Krystallium and characters included; its recycling cube goes on the Empire. | Follows the rules summaries (Ultraboardgames, BGA). Game Park gives Krystallium and characters back, and treats a card drafted this round as if it were being recycled. |
+| Empires | Side A of the five base Empires, each with its production and its end-game bonus. Seat *i* plays Empire *i*; seats are shuffled at Start. | Side B (the same production for everybody, no bonus) would need a per-game lobby option. |
+| New cards producing | Production is counted at the start of each step: a card finished in step *k* first produces in step *k+1*; one finished in Planning produces in Materials the same round. | Confirmed (Game Park). |
 | Ending a step | A player is done when their pool is empty and no choice is pending, or when they press Done (which drops unplaced cubes). A step where nobody has anything to place is skipped. | Pace: nobody waits on an empty step. |
 
 Edge cases:
@@ -99,9 +103,10 @@ need not be the host.
   with native tests (`pick_for_space`, `pick_for_empire`, `cube_targets`); the closures in
   `board.rs` only call `act(action)`.
 * Placing: clicking a free space uses the plain piece for it (that resource's cube, a
-  General, a Financier); picking a piece in the tray first overrides that. Krystallium is
-  used only when picked, since it fits anything and is easy to waste. Recycle and Scrap open
-  a dialog for the cube's target, because the target is part of the move.
+  General, a Financier, Krystallium on a Krystallium space); picking a piece in the tray first
+  overrides that. On a resource's space Krystallium is used only when picked, since it fits
+  anything and is easy to waste. Recycle opens a dialog for the cube's target, because the
+  target is part of the move; Scrap's dialog only confirms, its cube always goes on the Empire.
 * `client/wonderful.css` scopes every rule under `.wonderful`; generic element rules sit in
   `:where()` so the prefix adds no specificity. Checked rendered (not clicked) at 1280, 390,
   360 and 320 px; below 560 px the standings table stacks, because a scrolling table hid the
@@ -110,13 +115,6 @@ need not be the host.
 
 ## Known issues
 
-* **Bonus-cube leak.** `can_wrap_up` (`state.rs`) counts Krystallium and characters but not
-  held bonus cubes (`pending`). Worse, when a player's last pool cube finishes a building,
-  `place` marks them ready *before* `place_cube` pays the bonus. So a cube earned by the last
-  Exploration placement is swept to the Empire at round end before it can be placed. Fix
-  depends on the rule: if bonus cubes are placed at once, remove the holding convenience
-  (`pending`, the tray's extra cubes, the round-end sweep); if holding stays, make
-  `can_wrap_up` count held cubes that fit an open space. No test covers this yet.
 * **"Leave game" strands the seat.** The client forgets its token, but the server keeps the
   seat, so nobody can take it back and everyone waits at the next step. The room is cleared
   30 minutes after the last player disconnects. The other games stall the same way, but only
@@ -124,25 +122,20 @@ need not be the host.
 * **An offline player blocks everyone.** Nothing plays for a dropped seat and the server has
   no timer or kick. A host-only "skip this seat" or a timeout would both need the engine to
   play a step on a seat's behalf, which it can't do today. Ask before building either.
-* **Placeholder balance.** Only played by simple bots (the ignored `economy_report` test).
-  Don't tune it; the real cards will replace it.
+* **Only bots have played it.** The ignored `economy_report` test has two simple bots finish
+  about 8 cards and 15 to 30 points with the real cards; people score far more.
 * **Dialog accessibility.** The recycle/scrap dialog has `role="dialog"` and `aria-modal`
   but no Escape key and no focus handling.
 
 ## Left to do, in order
 
-1. **Play it in a browser** (checklist below). Everything after assumes it works.
-2. **Get the rulebook and the real card list.** Unblocks 3 and 4.
-3. **Settle the open rules** in the table above, and fix the bonus-cube leak with them.
-4. **Swap in the real catalogue.** Replace the rows of `designs()` and `EMPIRES` in
-   `wonderful-core/src/cards.rs`; set `DESIGNS` and `COPIES` (150 and 1 if every card
-   differs, and the tests' `twin()` goes). Re-point the tests that name placeholder cards
-   (about two dozen in `wonderful-core`, a few in `look.rs` and `board.rs`), rerun
-   `economy_report`, and look at the client with long names and big costs.
-5. **Dialog:** Escape closes it, focus moves in on open and back on close.
-6. **Absent players:** decide what should happen (see Known issues).
-7. **Corruption & Ascension:** needs its rules and cards, and a per-game lobby rules payload.
-   Not started. Solo mode isn't planned either.
+1. **Play it in a browser** (checklist below). Everything after assumes it works. Look at
+   the long names ("Gardens of the Hesperides") and the Krystallium spaces in particular.
+2. **Dialog:** Escape closes it, focus moves in on open and back on close.
+3. **Absent players:** decide what should happen (see Known issues).
+4. **Lobby options:** Empire side B, then the expansions (Corruption & Ascension, War or
+   Peace), all of which need a per-game lobby rules payload; the expansions also need their
+   cards and rules (Game Park has both). Not started. Solo mode isn't planned either.
 
 ### The browser pass
 
@@ -152,7 +145,7 @@ need not be the host.
   everyone has picked, passing to the next seat in rounds 1 and 3, the previous in 2 and 4.
 * Planning: Build and "Recycle for" on each card. Recycling opens a dialog listing buildings
   that still need that cube, plus the Empire. "Done planning" stays disabled until every card
-  is decided. Try Scrap on a building.
+  is decided. Try Scrap on a building (its dialog only confirms: the cube goes to the Empire).
 * Production: the step bar and race list. Click a free space (it lights up when what you hold
   fits). Pick another piece in the tray first to override. Try "Put on your Empire" and
   "Done: drop N cubes". A Science win shows "Take a General" / "Take a Financier" and blocks
