@@ -5,7 +5,7 @@ use engine::{Action, DevCard, GameView, Hand, Phase, Resource, SetupExpect};
 use leptos::prelude::*;
 
 fn act(app: App, a: Action) {
-    send(app, &ClientMsg::Colonists(a));
+    send(app, &ClientMsg::Catan(a));
 }
 
 fn sum(h: [u8; 5]) -> u32 {
@@ -76,7 +76,7 @@ pub fn game_screen(app: App, v: GameView, connected: Vec<bool>, room: String) ->
     view! {
         <div class="game">
             <header class="topbar">
-                <div class="brand">"Colonists"</div>
+                <div class="brand">"Catan"</div>
                 <div class="room">"Room " <b>{room}</b></div>
                 <div class="status">{status}</div>
                 <div class="dice">{dice}</div>

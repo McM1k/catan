@@ -11,18 +11,18 @@ use serde::{Deserialize, Serialize};
 /// The games the server can host.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GameKind {
-    Colonists,
+    Catan,
     Hanabi,
     /// A draft-and-build card game (original card set; see `wonderful-core`).
     Wonderful,
 }
 
 impl GameKind {
-    pub const ALL: [GameKind; 3] = [GameKind::Colonists, GameKind::Hanabi, GameKind::Wonderful];
+    pub const ALL: [GameKind; 3] = [GameKind::Catan, GameKind::Hanabi, GameKind::Wonderful];
 
     pub fn title(self) -> &'static str {
         match self {
-            GameKind::Colonists => "Colonists",
+            GameKind::Catan => "Catan",
             GameKind::Hanabi => "Hanabi",
             GameKind::Wonderful => "It's a Wonderful World",
         }
@@ -34,7 +34,7 @@ impl GameKind {
 
     pub fn max_players(self) -> usize {
         match self {
-            GameKind::Colonists => 4,
+            GameKind::Catan => 4,
             GameKind::Hanabi => 5,
             GameKind::Wonderful => 5,
         }
@@ -60,8 +60,8 @@ pub enum ClientMsg {
     Start,
     /// Leave the room for good (in a lobby this frees the seat).
     Leave,
-    /// A Colonists move.
-    Colonists(engine::Action),
+    /// A Catan move.
+    Catan(engine::Action),
     /// A Hanabi move.
     Hanabi(hanabi_core::Action),
     /// A Wonderful World move. Every player moves at the same time, so the
@@ -89,8 +89,8 @@ pub enum ServerMsg {
         /// The Hanabi variant rules picked so far (`None` for other games).
         rules: Option<hanabi_core::GameRules>,
     },
-    /// A running Colonists game, personalised for the receiving seat.
-    ColonistsState {
+    /// A running Catan game, personalised for the receiving seat.
+    CatanState {
         view: Box<engine::GameView>,
         connected: Vec<bool>,
     },
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn game_limits() {
-        assert_eq!(GameKind::Colonists.max_players(), 4);
+        assert_eq!(GameKind::Catan.max_players(), 4);
         assert_eq!(GameKind::Hanabi.max_players(), 5);
         assert_eq!(GameKind::Wonderful.max_players(), 5);
         assert_eq!(GameKind::ALL.len(), 3);
@@ -137,7 +137,7 @@ mod tests {
             ClientMsg::SetRules(GameRules { hanabii: true, ..Default::default() }),
             ClientMsg::Start,
             ClientMsg::Leave,
-            ClientMsg::Colonists(engine::Action::EndTurn),
+            ClientMsg::Catan(engine::Action::EndTurn),
             ClientMsg::Hanabi(hanabi_core::Action::Play { card_id: hanabi_core::CardId(3) }),
             ClientMsg::Hanabi(hanabi_core::Action::Clue {
                 target: PlayerId(1),
@@ -163,16 +163,16 @@ mod tests {
     }
 
     #[test]
-    fn colonists_state_survives_json() {
+    fn catan_state_survives_json() {
         let mut rng = StdRng::seed_from_u64(3);
         let names = vec!["A".to_string(), "B".to_string(), "C".to_string()];
         let game = engine::Game::new(engine::Rules::default(), names, &mut rng);
-        let msg = ServerMsg::ColonistsState {
+        let msg = ServerMsg::CatanState {
             view: Box::new(game.view_for(Some(1))),
             connected: vec![true, false, true],
         };
         let json = serde_json::to_string(&msg).unwrap();
-        let ServerMsg::ColonistsState { view, connected } = serde_json::from_str(&json).unwrap() else {
+        let ServerMsg::CatanState { view, connected } = serde_json::from_str(&json).unwrap() else {
             panic!("wrong variant: {json}");
         };
         assert_eq!(view.seat, Some(1));

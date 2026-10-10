@@ -48,11 +48,11 @@ Edge cases:
 
 The shape copies Hanabi's: a pure rules crate, three protocol additions, one `Running` arm on
 the server, one module on the client. Where nothing was specified, the nearest existing game
-was copied: Hanabi for the crate and protocol, Colonists for the screen lifecycle, Hanabi's
+was copied: Hanabi for the crate and protocol, Catan for the screen lifecycle, Hanabi's
 scoped stylesheet for the CSS.
 
 **Rules crate.** `wonderful-core` depends on serde alone. The only randomness is the opening
-shuffle, so the server passes a seed and `apply` takes no RNG (Colonists differs because it
+shuffle, so the server passes a seed and `apply` takes no RNG (Catan differs because it
 rolls dice mid-game). The shuffle is a SplitMix64 in `state.rs` rather than `rand`, which keeps
 the crate light for the protocol and client and makes any game replayable from its seed; most
 tests rely on that. Only `View` is serializable, not `State`, since rooms live in memory.
@@ -70,7 +70,7 @@ redo production or scoring.
 
 **Server.** The seat comes from the connection's token, never from the message. A refused move
 sends an error to the sender only. An accepted one sends every connected seat its full view
-(not a diff), so a reconnect is just a rejoin. Seats are shuffled at Start (like Colonists,
+(not a diff), so a reconnect is just a rejoin. Seats are shuffled at Start (like Catan,
 unlike Hanabi) because seat order decides passing direction and Empire; after Start, seat 0
 need not be the host.
 
@@ -90,7 +90,7 @@ need not be the host.
 **Client.**
 
 * The screen is rebuilt on every message: `Screen::WonderfulGame` carries the view, as
-  Colonists does, rather than Hanabi's signals (which exist to protect animations Wonderful
+  Catan does, rather than Hanabi's signals (which exist to protect animations Wonderful
   doesn't have). Interface state that must outlive a rebuild (the piece picked in the tray, a
   recycled card waiting for a target) lives in `App.wonderful` and is re-checked against each
   new view: `effective_held` falls back to the first piece held when the chosen one is gone,

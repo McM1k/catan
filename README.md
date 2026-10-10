@@ -1,7 +1,7 @@
-# Colonists + Hanabi + It's a Wonderful World
+# Catan + Hanabi + It's a Wonderful World
 
 Three multiplayer, browser-based games in Rust, served by one server and played from
-one page: a Catan-style board game ("Colonists"), the Hanabi clone from
+one page: Catan, the Hanabi clone from
 [McM1k/hanabii](https://github.com/McM1k/hanabii) (merged from commit `c2d5fa6`), and a
 card-drafting empire builder ("It's a Wonderful World", with an original placeholder card
 set, see below).
@@ -10,7 +10,7 @@ others join with it, the host starts the game.
 
 | Crate         | What it is |
 |---------------|------------|
-| `engine`      | Colonists rules: board, game, actions, per-player views. No I/O. |
+| `engine`      | Catan rules: board, game, actions, per-player views. No I/O. |
 | `hanabi-core` | Hanabi rules, imported from the Hanabi repo's `game-core` (variants, "hanabii" mode, redacted per-player view). No I/O. |
 | `wonderful-core` | It's a Wonderful World rules: the card table, drafting, planning, production, scoring, redacted per-player view. No I/O. |
 | `protocol`    | The WebSocket messages shared by every game: create / join / start / leave, the lobby, and a wrapper for each game's moves and views. |
@@ -19,7 +19,7 @@ others join with it, the host starts the game.
 
 The server is authoritative. Clients send moves; the server validates them with the
 game's rules crate and sends every seat its own filtered view (other players' hands
-and development cards in Colonists, your own cards in Hanabi, the hand you are drafting
+and development cards in Catan, your own cards in Hanabi, the hand you are drafting
 from, your pick and your drafted cards in It's a Wonderful World, are never sent to the
 other seats).
 
@@ -68,7 +68,7 @@ shows up as a missing page instead.
 
 Hanabi used to have its own server with a "type a name and a room code" join screen,
 where anyone typing the same code landed in the same room and any seat could start
-the game. It now runs on the room system Colonists already had:
+the game. It now runs on the room system Catan already had:
 
 * **Create → code.** The game is picked in the menu; the server makes a free 4-letter
   code (no `I` or `O`). **Join** takes the code, and the code decides which game you
@@ -80,11 +80,11 @@ the game. It now runs on the room system Colonists already had:
   connection drops during a game the seat stays yours, shown as "offline" to the
   others, and a refresh or a reconnect takes it back. In a lobby, leaving frees the seat.
 * **Names** are trimmed, at most 20 characters, and unique in a room (ignoring case).
-* **Limits.** Colonists 2–4 players, Hanabi 2–5, It's a Wonderful World 2–5. Joining a running game is refused
+* **Limits.** Catan 2–4 players, Hanabi 2–5, It's a Wonderful World 2–5. Joining a running game is refused
   unless you hold its token. A room nobody has connected to for 30 minutes is removed.
-* **Seat order.** Colonists shuffles the seats when the game starts. Hanabi keeps join
+* **Seat order.** Catan shuffles the seats when the game starts. Hanabi keeps join
   order, so the host plays first and the order round the table is who joined when.
-  It's a Wonderful World shuffles the seats like Colonists; there are no turns, so the
+  It's a Wonderful World shuffles the seats like Catan; there are no turns, so the
   seat only decides who passes cards to whom, and which Empire you play.
 
 Rooms live in memory only; a server restart ends every game.
@@ -116,7 +116,7 @@ cargo test --workspace
   nobody else's) in Wonderful, and the Hanabi rule tests that used to live in the old
   server (hanabii locks the other options, rules freeze once the game starts, …).
 * `client` (83): native render tests that build real games and render every screen to
-  HTML: all Colonists phases, the menu, the lobbies, the Hanabi board for every seat,
+  HTML: all Catan phases, the menu, the lobbies, the Hanabi board for every seat,
   player count and rule set, whole games rendered move by move, the clue
   buttons, rings, drop zones, game-over line, flashes; and It's a Wonderful World's
   home, waiting room and board, for every seat, phase and player count of a whole
@@ -132,7 +132,7 @@ build it with Trunk and play a round of each game, looking in particular at:
 
 * Hanabi's hand-slide animation, drag and drop onto the play/discard zones, and the
   flashes and spinning rings (these live in effects that only run in a browser);
-* the two stylesheets: Colonists' is scoped under `.theme-colonists` and Hanabi's
+* the two stylesheets: Catan's is scoped under `.theme-catan` and Hanabi's
   (`client/hanabi.css`) under `.hanabi`, so they can't restyle each other, but that
   scoping was done mechanically;
 * the tab title (it follows the game, and Hanabi's "Hanabii" mode);
@@ -150,7 +150,7 @@ build it with Trunk and play a round of each game, looking in particular at:
 The first screen is a picker (`client/src/menu.rs`). A card leads to that game's
 create/join screen; "← All games" and leaving a game bring you back.
 
-## Colonists
+## Catan
 
 ### Look and feel
 
@@ -177,7 +177,7 @@ Longest Road, Largest Army, first to 10 points wins.
 
 Numbers live in `engine::Rules` (`victory_points`, `discard_above`, `bank_ratio`,
 `longest_road_min`, `largest_army_min`) and are passed to `Game::new` in
-`server/src/rooms.rs` (look for `Running::Colonists`). Structural tweaks go in
+`server/src/rooms.rs` (look for `Running::Catan`). Structural tweaks go in
 `engine/src/game.rs`:
 
 * new costs / pieces: `build_*` functions and the `MAX_*` constants
@@ -284,9 +284,6 @@ sends every seat its own view after every move.
 * Rooms live in memory only; a server restart ends all games.
 * No chat, spectators or turn timers; a finished game ends the room's play (leave and
   create a new room for another round).
-* Colonists always uses the random standard layout.
+* Catan always uses the random standard layout.
 * It's a Wonderful World uses a placeholder card set and has no Corruption & Ascension
   option (see its section above).
-* "Catan" is a trademark; keep your own name and artwork if you publish this.
-  "It's a Wonderful World" is a published game too: the rules follow it, but the card
-  names, numbers and art here are original placeholders.

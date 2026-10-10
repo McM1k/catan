@@ -2,7 +2,7 @@
 //!
 //! Ported from the stand-alone Hanabi client (McM1k/hanabii, Leptos 0.6).
 //! The rooms are now the shared ones (see `crate::state`), so the old
-//! name-and-code join screen became the same create/join flow Colonists
+//! name-and-code join screen became the same create/join flow Catan
 //! uses, and the host starts the game.
 
 pub mod board;

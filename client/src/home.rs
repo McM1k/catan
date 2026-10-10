@@ -3,12 +3,12 @@ use leptos::prelude::*;
 use protocol::{ClientMsg, GameKind, LobbyPlayer};
 
 pub fn home_screen(app: App) -> impl IntoView {
-    let create = move |_| create_room(app, GameKind::Colonists);
+    let create = move |_| create_room(app, GameKind::Catan);
     let join = move |_| join_room(app);
 
     view! {
         <div class="home card">
-            <h1>"Colonists"</h1>
+            <h1>"Catan"</h1>
             <p class="muted">"Trade, build and settle the island. 2–4 players, play in your browser."</p>
             <label>"Your name"
                 <input type="text" maxlength="20" placeholder="e.g. Ada"

@@ -1,4 +1,4 @@
-//! Rules engine for "Colonists", a Catan-style board game.
+//! Rules engine for Catan.
 //!
 //! The engine is pure, deterministic given an RNG, and shared by the server
 //! (authoritative state) and the client (rendering types).

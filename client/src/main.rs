@@ -14,10 +14,10 @@ use leptos::prelude::*;
 use protocol::GameKind;
 use state::{connect, App, Screen};
 
-/// A Colonists screen. Its stylesheet is scoped under `.theme-colonists`, so
+/// A Catan screen. Its stylesheet is scoped under `.theme-catan`, so
 /// the games can't restyle each other.
-fn colonists(content: impl IntoView + 'static) -> AnyView {
-    view! { <div class="theme-colonists">{content.into_any()}</div> }.into_any()
+fn catan(content: impl IntoView + 'static) -> AnyView {
+    view! { <div class="theme-catan">{content.into_any()}</div> }.into_any()
 }
 
 /// A Hanabi screen: the same, under `.hanabi` (see `hanabi::screens::shell`).
@@ -35,16 +35,16 @@ fn wonderful_page(content: impl IntoView + 'static) -> AnyView {
 fn current_screen(app: App) -> AnyView {
     match app.screen.get() {
         Screen::Menu => menu::menu_screen(app).into_any(),
-        Screen::Home(GameKind::Colonists) => colonists(home::home_screen(app)),
+        Screen::Home(GameKind::Catan) => catan(home::home_screen(app)),
         Screen::Home(GameKind::Hanabi) => hanabi_page(app, hanabi::screens::home_screen(app)),
         Screen::Home(GameKind::Wonderful) => wonderful_page(wonderful::screens::home_screen(app)),
         Screen::Lobby {
             room,
-            game: GameKind::Colonists,
+            game: GameKind::Catan,
             players,
             is_host,
             ..
-        } => colonists(home::lobby_screen(app, room, players, is_host)),
+        } => catan(home::lobby_screen(app, room, players, is_host)),
         Screen::Lobby {
             room,
             game: GameKind::Hanabi,
@@ -59,7 +59,7 @@ fn current_screen(app: App) -> AnyView {
             you,
             is_host,
         } => wonderful_page(wonderful::screens::lobby_screen(app, room, players, you, is_host)),
-        Screen::Game { view, connected, room } => colonists(game::game_screen(app, *view, connected, room)),
+        Screen::Game { view, connected, room } => catan(game::game_screen(app, *view, connected, room)),
         Screen::HanabiGame => hanabi_page(app, hanabi::board::board(app)),
         Screen::WonderfulGame { view, names, connected, room } => {
             wonderful_page(wonderful::board::board(app, *view, names, connected, room))
@@ -72,13 +72,13 @@ fn page_title(app: App) -> &'static str {
     let game = app.screen.with(|screen| match screen {
         Screen::Menu => None,
         Screen::Home(game) | Screen::Lobby { game, .. } => Some(*game),
-        Screen::Game { .. } => Some(GameKind::Colonists),
+        Screen::Game { .. } => Some(GameKind::Catan),
         Screen::HanabiGame => Some(GameKind::Hanabi),
         Screen::WonderfulGame { .. } => Some(GameKind::Wonderful),
     });
     match game {
         None => "Games",
-        Some(GameKind::Colonists) => "Colonists",
+        Some(GameKind::Catan) => "Catan",
         Some(GameKind::Hanabi) => hanabi::screens::tab_title(app),
         Some(GameKind::Wonderful) => wonderful::screens::TAB_TITLE,
     }
@@ -252,26 +252,26 @@ mod render_tests {
             assert!(matches!(app.screen.get_untracked(), Screen::Menu));
             let html = current_screen(app).to_html();
             assert!(html.contains("Pick a game") && html.contains("menu-page"));
-            assert!(html.contains("Colonists") && html.contains("Hanabi"));
+            assert!(html.contains("Catan") && html.contains("Hanabi"));
             assert!(shows(&html, "It's a Wonderful World"));
-            // Colonists seats 2-4; Hanabi and It's a Wonderful World seat 2-5.
+            // Catan seats 2-4; Hanabi and It's a Wonderful World seat 2-5.
             assert_eq!(html.matches("2\u{2013}4 players").count(), 1);
             assert_eq!(html.matches("2\u{2013}5 players").count(), 2);
             // Every game is playable here: no greyed-out card, no outside link.
             assert!(!html.contains("disabled") && !html.contains("href="));
             assert_eq!(page_title(app), "Games");
 
-            app.screen.set(Screen::Home(GameKind::Colonists));
+            app.screen.set(Screen::Home(GameKind::Catan));
             let html = current_screen(app).to_html();
-            assert!(html.contains("theme-colonists") && html.contains("Create a room"));
+            assert!(html.contains("theme-catan") && html.contains("Create a room"));
             assert!(!html.contains("class=\"hanabi\"") && !html.contains("class=\"wonderful\""));
-            assert_eq!(page_title(app), "Colonists");
+            assert_eq!(page_title(app), "Catan");
 
             app.screen.set(Screen::Home(GameKind::Hanabi));
             let html = current_screen(app).to_html();
             assert!(html.contains("class=\"hanabi\"") && html.contains("Create a room"));
             assert!(html.contains("Join room") && html.contains("All games"));
-            assert!(!html.contains("theme-colonists") && !html.contains("class=\"wonderful\""));
+            assert!(!html.contains("theme-catan") && !html.contains("class=\"wonderful\""));
             assert_eq!(page_title(app), "Hanabi");
 
             app.screen.set(Screen::Home(GameKind::Wonderful));
@@ -279,7 +279,7 @@ mod render_tests {
             assert!(html.contains("class=\"wonderful\"") && html.contains("Create a room"));
             assert!(html.contains("Join room") && html.contains("All games"));
             assert!(shows(&html, "It's a Wonderful World"));
-            assert!(!html.contains("theme-colonists") && !html.contains("class=\"hanabi\""));
+            assert!(!html.contains("theme-catan") && !html.contains("class=\"hanabi\""));
             assert_eq!(page_title(app), "It's a Wonderful World");
         });
     }
@@ -297,8 +297,8 @@ mod render_tests {
                 is_host: false,
             };
 
-            // Picked Colonists in the menu, but the code belongs to a Hanabi room.
-            app.screen.set(Screen::Home(GameKind::Colonists));
+            // Picked Catan in the menu, but the code belongs to a Hanabi room.
+            app.screen.set(Screen::Home(GameKind::Catan));
             app.screen.set(lobby(GameKind::Hanabi));
             let html = current_screen(app).to_html();
             assert!(html.contains("WXYZ") && html.contains("Hanabii mode"));
@@ -306,7 +306,7 @@ mod render_tests {
             assert!(html.contains("Bob") && html.contains("(you)"));
             assert!(!html.contains("Start game"));
 
-            app.screen.set(lobby(GameKind::Colonists));
+            app.screen.set(lobby(GameKind::Catan));
             let html = current_screen(app).to_html();
             assert!(html.contains("WXYZ") && html.contains("Waiting for the host to start"));
             assert!(!html.contains("Hanabii mode"));
@@ -316,14 +316,14 @@ mod render_tests {
             let html = current_screen(app).to_html();
             assert!(html.contains("WXYZ") && html.contains("Waiting for the host to start"));
             assert!(html.contains("class=\"wonderful\"") && html.contains("(you)"));
-            assert!(!html.contains("Hanabii mode") && !html.contains("theme-colonists"));
+            assert!(!html.contains("Hanabii mode") && !html.contains("theme-catan"));
             assert!(!html.contains("Start game"));
             assert_eq!(page_title(app), "It's a Wonderful World");
         });
     }
 
     #[test]
-    fn colonists_lobby_renders() {
+    fn catan_lobby_renders() {
         let owner = Owner::new();
         owner.with(|| {
             let app = App::new();
@@ -425,7 +425,7 @@ mod render_tests {
             let html = current_screen(app).to_html();
             assert!(html.contains("class=\"wonderful\"") && html.contains("WXYZ"));
             assert!(html.contains("Draft") && html.contains("Leave game"));
-            assert!(!html.contains("theme-colonists") && !html.contains("class=\"hanabi\""));
+            assert!(!html.contains("theme-catan") && !html.contains("class=\"hanabi\""));
             assert_eq!(page_title(app), "It's a Wonderful World");
         });
     }

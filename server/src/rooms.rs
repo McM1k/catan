@@ -41,7 +41,7 @@ pub struct Room {
 
 /// The game in progress. Each variant is that game's authoritative state.
 pub enum Running {
-    Colonists(Game),
+    Catan(Game),
     Hanabi(GameState),
     Wonderful(wonderful_core::State),
 }
@@ -241,10 +241,10 @@ pub fn process(state: &Shared, tx: &Tx, ident: &mut Option<Ident>, msg: ClientMs
             }
             let mut rng = rand::thread_rng();
             r.game = Some(match r.kind {
-                GameKind::Colonists => {
+                GameKind::Catan => {
                     r.seats.shuffle(&mut rng); // random turn order
                     let names = r.seats.iter().map(|s| s.name.clone()).collect();
-                    Running::Colonists(Game::new(Rules::default(), names, &mut rng))
+                    Running::Catan(Game::new(Rules::default(), names, &mut rng))
                 }
                 // Seats keep their join order: the host plays first.
                 GameKind::Hanabi => {
@@ -265,12 +265,12 @@ pub fn process(state: &Shared, tx: &Tx, ident: &mut Option<Ident>, msg: ClientMs
             leave(&mut rooms, &id, tx, true);
             None
         }
-        ClientMsg::Colonists(action) => {
+        ClientMsg::Catan(action) => {
             let id = ident.as_ref()?;
             let r = rooms.map.get_mut(&id.room)?;
             let seat = r.seats.iter().position(|s| s.token == id.token)?;
-            let Some(Running::Colonists(game)) = r.game.as_mut() else {
-                return Some(not_running(r, GameKind::Colonists));
+            let Some(Running::Catan(game)) = r.game.as_mut() else {
+                return Some(not_running(r, GameKind::Catan));
             };
             let mut rng = rand::thread_rng();
             match game.apply(seat, action, &mut rng) {
@@ -322,7 +322,7 @@ pub fn broadcast(room: &Room) {
     for (i, seat) in room.seats.iter().enumerate() {
         let Some(tx) = &seat.tx else { continue };
         let msg = match &room.game {
-            Some(Running::Colonists(g)) => ServerMsg::ColonistsState {
+            Some(Running::Catan(g)) => ServerMsg::CatanState {
                 view: Box::new(g.view_for(Some(i))),
                 connected: connected.clone(),
             },
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn creating_a_room_gives_a_code_a_token_and_a_lobby() {
         let state = new_state();
-        let (mut host, code) = create(&state, GameKind::Colonists, "Ann");
+        let (mut host, code) = create(&state, GameKind::Catan, "Ann");
         assert_eq!(code.len(), 4);
         assert!(code.chars().all(|c| c.is_ascii_uppercase()));
         let msgs = host.drain();
@@ -500,7 +500,7 @@ mod tests {
         match &msgs[1] {
             ServerMsg::Lobby { room, game, players, you, is_host, rules } => {
                 assert_eq!(room, &code);
-                assert_eq!(*game, GameKind::Colonists);
+                assert_eq!(*game, GameKind::Catan);
                 assert_eq!(players.len(), 1);
                 assert_eq!((*you, *is_host), (0, true));
                 assert!(rules.is_none(), "only Hanabi has lobby rules");
@@ -513,10 +513,10 @@ mod tests {
     fn the_room_code_decides_the_game() {
         let state = new_state();
         let (_a, hanabi_code) = create(&state, GameKind::Hanabi, "Ann");
-        let (_b, colonists_code) = create(&state, GameKind::Colonists, "Bob");
+        let (_b, catan_code) = create(&state, GameKind::Catan, "Bob");
 
         let mut c = join(&state, &hanabi_code.to_lowercase(), "Cy").unwrap();
-        let mut d = join(&state, &colonists_code, "Di").unwrap();
+        let mut d = join(&state, &catan_code, "Di").unwrap();
         let game_of = |c: &mut Client| {
             c.drain().into_iter().find_map(|m| match m {
                 ServerMsg::Lobby { game, .. } => Some(game),
@@ -524,7 +524,7 @@ mod tests {
             })
         };
         assert_eq!(game_of(&mut c), Some(GameKind::Hanabi));
-        assert_eq!(game_of(&mut d), Some(GameKind::Colonists));
+        assert_eq!(game_of(&mut d), Some(GameKind::Catan));
     }
 
     #[test]
@@ -561,7 +561,7 @@ mod tests {
         let (code, _hanabi) = lobby(&state, GameKind::Hanabi, 5);
         assert_eq!(join(&state, &code, "P6").err().as_deref(), Some("That room is full."));
 
-        let (code, _colonists) = lobby(&state, GameKind::Colonists, 4);
+        let (code, _catan) = lobby(&state, GameKind::Catan, 4);
         assert_eq!(join(&state, &code, "P5").err().as_deref(), Some("That room is full."));
 
         let (code, _wonderful) = lobby(&state, GameKind::Wonderful, 5);
@@ -616,7 +616,7 @@ mod tests {
     #[test]
     fn an_emptied_lobby_closes_the_room() {
         let state = new_state();
-        let (mut host, code) = create(&state, GameKind::Colonists, "Ann");
+        let (mut host, code) = create(&state, GameKind::Catan, "Ann");
         host.send(&state, ClientMsg::Leave);
         assert!(!state.lock().unwrap().map.contains_key(&code));
     }
@@ -638,7 +638,7 @@ mod tests {
             assert_eq!(to_check.as_deref(), Some(code.as_str()));
             let offline = clients[0].drain().pop().expect("the host is told");
             let connected = match offline {
-                ServerMsg::ColonistsState { connected, .. }
+                ServerMsg::CatanState { connected, .. }
                 | ServerMsg::HanabiState { connected, .. }
                 | ServerMsg::WonderfulState { connected, .. } => connected,
                 other => panic!("expected a state message, got {other:?}"),
@@ -657,7 +657,7 @@ mod tests {
             assert!(matches!(&msgs[0], ServerMsg::Joined { token: t, .. } if *t == token));
             assert!(matches!(
                 msgs.last().unwrap(),
-                ServerMsg::ColonistsState { .. } | ServerMsg::HanabiState { .. } | ServerMsg::WonderfulState { .. }
+                ServerMsg::CatanState { .. } | ServerMsg::HanabiState { .. } | ServerMsg::WonderfulState { .. }
             ));
 
             // Nobody left in the room: it is dropped once the timer fires.
@@ -689,27 +689,27 @@ mod tests {
     fn a_move_for_the_wrong_game_or_before_the_start_is_refused() {
         let state = new_state();
         let (_code, mut clients) = lobby(&state, GameKind::Hanabi, 2);
-        let colonists_move = ClientMsg::Colonists(engine::Action::EndTurn);
-        assert_eq!(clients[0].send(&state, colonists_move.clone()).as_deref(), Some("That move belongs to a different game."));
+        let catan_move = ClientMsg::Catan(engine::Action::EndTurn);
+        assert_eq!(clients[0].send(&state, catan_move.clone()).as_deref(), Some("That move belongs to a different game."));
         let hanabi_move = ClientMsg::Hanabi(Action::Play { card_id: hanabi_core::CardId(0) });
         assert_eq!(clients[0].send(&state, hanabi_move.clone()).as_deref(), Some("The game hasn't started yet."));
 
         clients[0].send(&state, ClientMsg::Start);
-        assert_eq!(clients[0].send(&state, colonists_move).as_deref(), Some("That move belongs to a different game."));
+        assert_eq!(clients[0].send(&state, catan_move).as_deref(), Some("That move belongs to a different game."));
 
-        let (_, mut colonists) = lobby(&state, GameKind::Colonists, 2);
-        colonists[0].send(&state, ClientMsg::Start);
-        assert_eq!(colonists[0].send(&state, hanabi_move.clone()).as_deref(), Some("That move belongs to a different game."));
+        let (_, mut catan) = lobby(&state, GameKind::Catan, 2);
+        catan[0].send(&state, ClientMsg::Start);
+        assert_eq!(catan[0].send(&state, hanabi_move.clone()).as_deref(), Some("That move belongs to a different game."));
 
         // The same two checks for Wonderful World: its moves in another
         // game's room, another game's moves in its room, and a move early.
         let wonderful_move = ClientMsg::Wonderful(wonderful_core::Action::Ready);
-        assert_eq!(colonists[0].send(&state, wonderful_move.clone()).as_deref(), Some("That move belongs to a different game."));
+        assert_eq!(catan[0].send(&state, wonderful_move.clone()).as_deref(), Some("That move belongs to a different game."));
         let (_, mut wonderful) = lobby(&state, GameKind::Wonderful, 2);
         assert_eq!(wonderful[0].send(&state, wonderful_move.clone()).as_deref(), Some("The game hasn't started yet."));
         wonderful[0].send(&state, ClientMsg::Start);
         assert_eq!(wonderful[0].send(&state, hanabi_move).as_deref(), Some("That move belongs to a different game."));
-        assert_eq!(wonderful[0].send(&state, ClientMsg::Colonists(engine::Action::EndTurn)).as_deref(), Some("That move belongs to a different game."));
+        assert_eq!(wonderful[0].send(&state, ClientMsg::Catan(engine::Action::EndTurn)).as_deref(), Some("That move belongs to a different game."));
     }
 
     #[test]
@@ -723,12 +723,12 @@ mod tests {
         assert!(state.lock().unwrap().map.is_empty());
     }
 
-    // ----- Colonists through the shared rooms ------------------------
+    // ----- Catan through the shared rooms ------------------------
 
     #[test]
-    fn a_colonists_game_deals_every_seat_its_own_view_and_checks_whose_turn_it_is() {
+    fn a_catan_game_deals_every_seat_its_own_view_and_checks_whose_turn_it_is() {
         let state = new_state();
-        let (code, mut clients) = lobby(&state, GameKind::Colonists, 3);
+        let (code, mut clients) = lobby(&state, GameKind::Catan, 3);
         assert_eq!(clients[0].send(&state, ClientMsg::Start), None);
 
         // Everyone gets a view of their own seat; seats are a permutation.
@@ -738,7 +738,7 @@ mod tests {
                 .drain()
                 .into_iter()
                 .find_map(|m| match m {
-                    ServerMsg::ColonistsState { view, .. } => Some(view),
+                    ServerMsg::CatanState { view, .. } => Some(view),
                     _ => None,
                 })
                 .expect("a state for every player");
@@ -753,13 +753,13 @@ mod tests {
         let (mine, other): (Vec<usize>, Vec<usize>) = (0..3).partition(|&i| views[i].seat == Some(current));
         let (cur, oth) = (mine[0], other[0]);
         let vertex = views[cur].legal.settlements[0];
-        let act = ClientMsg::Colonists(engine::Action::BuildSettlement { vertex });
+        let act = ClientMsg::Catan(engine::Action::BuildSettlement { vertex });
         assert!(clients[oth].send(&state, act.clone()).is_some());
         assert_eq!(clients[cur].send(&state, act), None);
         for c in &mut clients {
-            assert!(c.drain().iter().any(|m| matches!(m, ServerMsg::ColonistsState { .. })), "everyone sees the move");
+            assert!(c.drain().iter().any(|m| matches!(m, ServerMsg::CatanState { .. })), "everyone sees the move");
         }
-        assert!(matches!(state.lock().unwrap().map[&code].game, Some(Running::Colonists(_))));
+        assert!(matches!(state.lock().unwrap().map[&code].game, Some(Running::Catan(_))));
     }
 
     // ----- Hanabi through the shared rooms ---------------------------
@@ -845,9 +845,9 @@ mod tests {
         assert_eq!(hanabi_rules_of(&state, &code), GameRules::default());
         assert!(clients[0].drain().is_empty(), "a refused change tells nobody");
 
-        let (_code, mut colonists) = lobby(&state, GameKind::Colonists, 2);
+        let (_code, mut catan) = lobby(&state, GameKind::Catan, 2);
         assert_eq!(
-            set_rules(&state, &mut colonists[0], rules).as_deref(),
+            set_rules(&state, &mut catan[0], rules).as_deref(),
             Some("This game has no options to set.")
         );
     }

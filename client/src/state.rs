@@ -27,7 +27,7 @@ pub enum Screen {
         you: usize,
         is_host: bool,
     },
-    /// A running Colonists game.
+    /// A running Catan game.
     Game {
         view: Box<GameView>,
         connected: Vec<bool>,
@@ -36,7 +36,7 @@ pub enum Screen {
     /// A running Hanabi game. Carries no data on purpose: the state lives in
     /// `App::hanabi`, so updates don't rebuild the board (see `hanabi::Signals`).
     HanabiGame,
-    /// A running It's a Wonderful World game. Like Colonists it carries the
+    /// A running It's a Wonderful World game. Like Catan it carries the
     /// state and is rebuilt on every message; what has to outlive that (the
     /// piece picked in the tray) is in `App::wonderful`.
     WonderfulGame {
@@ -330,7 +330,7 @@ fn handle(app: App, msg: ServerMsg) {
                 });
             }
         }
-        ServerMsg::ColonistsState { view, connected } => {
+        ServerMsg::CatanState { view, connected } => {
             note_changes(app, &view);
             let room = load(KEY_ROOM).unwrap_or_default();
             app.screen.set(Screen::Game {

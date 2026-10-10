@@ -5,10 +5,10 @@ use leptos::prelude::*;
 use protocol::GameKind;
 
 pub fn menu_screen(app: App) -> impl IntoView {
-    let colonists = game_card(
+    let catan = game_card(
         app,
-        GameKind::Colonists,
-        colonists_icon().into_any(),
+        GameKind::Catan,
+        catan_icon().into_any(),
         "Build roads and settlements, trade resources and race to 10 points on a random island.",
     );
     let hanabi = game_card(
@@ -30,7 +30,7 @@ pub fn menu_screen(app: App) -> impl IntoView {
             <div class="menu">
                 <h1>"Pick a game"</h1>
                 <p class="muted">"Play with friends in your browser: no accounts, just a room code."</p>
-                <div class="game-grid">{colonists}{hanabi}{wonderful}</div>
+                <div class="game-grid">{catan}{hanabi}{wonderful}</div>
             </div>
         </div>
     }
@@ -67,9 +67,9 @@ fn hex_points(cx: f64, cy: f64, r: f64) -> String {
 }
 
 /// Three terrain hexes (forest, hills, fields).
-fn colonists_icon() -> impl IntoView {
+fn catan_icon() -> impl IntoView {
     view! {
-        <svg viewBox="0 0 64 64" role="img" aria-label="Colonists">
+        <svg viewBox="0 0 64 64" role="img" aria-label="Catan">
             <polygon points=hex_points(21.0, 24.0, 12.0) fill="#2d6a4f" stroke="#fdf6e3" stroke-width="1.5" />
             <polygon points=hex_points(43.0, 24.0, 12.0) fill="#c1553b" stroke="#fdf6e3" stroke-width="1.5" />
             <polygon points=hex_points(32.0, 43.0, 12.0) fill="#e0b94f" stroke="#fdf6e3" stroke-width="1.5" />

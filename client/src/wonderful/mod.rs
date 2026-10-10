@@ -2,7 +2,7 @@
 //! board) and what a click means.
 //!
 //! The game screen carries the state the server last sent (see
-//! `Screen::WonderfulGame`) and is rebuilt on every message, as Colonists is.
+//! `Screen::WonderfulGame`) and is rebuilt on every message, as Catan is.
 //! What only the browser knows (the piece picked in the tray, a cube waiting
 //! for its place) lives in [`Ui`], which outlives those rebuilds.
 
