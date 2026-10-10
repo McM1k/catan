@@ -1086,6 +1086,13 @@
   font-size: 0.85rem;
 }
 
+/* What the Empire card scores at the end, under its name. */
+.wonderful .empire-points {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+}
+
 .wonderful .points {
   display: flex;
   align-items: baseline;
